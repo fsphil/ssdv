@@ -1,2 +1,4 @@
 ssdv
 *.o
+*.jpeg
+*.bin
