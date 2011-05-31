@@ -1,0 +1,19 @@
+SSDV - simple command line app for encoding / decoding SSDV image data
+
+Created by Philip Heron <phil@sanslogic.co.uk>
+http://www.sanslogic.co.uk/ssdv/
+
+A robust packetised version of the JPEG image format.
+
+Uses the Reed-Solomon codec written by Phil Karn, KA9Q.
+
+INSTALLING
+
+make
+
+TODO
+
+* Proper handling of DQT tables that don't match the SSDV tables.
+* Allow the decoder to handle multiple images in the input stream.
+* Try adaptive huffman tables.
+
