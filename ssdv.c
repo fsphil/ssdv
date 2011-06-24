@@ -118,6 +118,15 @@ static uint8_t *sdht_ac[3] = { std_dht10, std_dht11, std_dht11 };
 static uint8_t *dht_dc[3] = { std_dht00, std_dht01, std_dht01 };
 static uint8_t *dht_ac[3] = { std_dht10, std_dht11, std_dht11 };
 
+/* Helpers for looking up the current DQT values */
+#define SDQT (sdqt[s->component][1 + s->acpart])
+#define DDQT (dqt[s->component][1 + s->acpart])
+
+/* Helpers for converting between DQT tables */
+#define AADJ(i) (SDQT == DDQT ? (i) : (i / DDQT))
+#define UADJ(i) (SDQT == DDQT ? (i) : (i * SDQT))
+#define BADJ(i) (SDQT == DDQT ? (i) : (i * SDQT / DDQT))
+
 /*
 static char *strbits(uint32_t value, uint8_t bits)
 {
@@ -278,10 +287,6 @@ static char ssdv_out_jpeg_int(ssdv_t *s, uint8_t rle, int value)
 	if(s->acpart == 0) dht = dht_dc[s->component];
 	else               dht = dht_ac[s->component];
 	
-	/* Adjust for output DQT */
-	//value *= sdqt[s->component][1 + s->acpart];
-	//value /= dqt[s->component][1 + s->acpart];
-	
 	jpeg_encode_int(value, &intbits, &intlen);
 	r = jpeg_dht_lookup_symbol(dht, (rle << 4) | (intlen & 0x0F), &huffbits, &hufflen);
 	
@@ -311,7 +316,7 @@ static char ssdv_process(ssdv_t *s)
 				/* No change in DC from last block */
 				if(s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5)
 				{
-					if(s->dcmode == 0) ssdv_out_jpeg_int(s, 0, s->dc[s->component]);
+					if(s->dcmode == 0) ssdv_out_jpeg_int(s, 0, AADJ(s->dc[s->component]));
 					else
 					{
 						ssdv_out_jpeg_int(s, 0, 0 - s->dc[s->component]);
@@ -376,8 +381,8 @@ static char ssdv_process(ssdv_t *s)
 				if(s->dcmode == 0)
 				{
 					/* Output absolute DC value */
-					s->dc[s->component] += i;
-					ssdv_out_jpeg_int(s, 0, s->dc[s->component]);
+					s->dc[s->component] += UADJ(i);
+					ssdv_out_jpeg_int(s, 0, AADJ(s->dc[s->component]));
 				}
 				else
 				{
@@ -389,14 +394,33 @@ static char ssdv_process(ssdv_t *s)
 			else
 			{
 				/* Output relative DC value */
-				s->dc[s->component] += i;
-				ssdv_out_jpeg_int(s, 0, i);
+				s->dc[s->component] += UADJ(i);
+				ssdv_out_jpeg_int(s, 0, BADJ(i));
 			}
 		}
 		else /* AC */
 		{
-			/* Output AC codes directly */
-			ssdv_out_jpeg_int(s, s->acrle, i);
+			if((i = BADJ(i)))
+			{
+				s->accrle += s->acrle;
+				while(s->accrle >= 16)
+				{
+					ssdv_out_jpeg_int(s, 15, 0);
+					s->accrle -= 16;
+				}
+				ssdv_out_jpeg_int(s, s->accrle, i);
+				s->accrle = 0;
+			}
+			else
+			{
+				/* AC value got reduced to 0 in the DQT conversion */
+				if(s->acpart >= 63)
+				{
+					ssdv_out_jpeg_int(s, 0, 0);
+					s->accrle = 0;
+				}
+				else s->accrle += s->acrle + 1;
+			}
 		}
 		
 		/* Next AC part to expect */
@@ -439,6 +463,7 @@ static char ssdv_process(ssdv_t *s)
 		else s->component = s->mcupart - 3;
 		
 		s->acpart = 0;
+		s->accrle = 0;
 	}
 	
 	if(s->out_len == 0) return(SSDV_BUFFER_FULL);
@@ -976,6 +1001,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->component = 0;
 		s->mcupart = 0;
 		s->acpart = 0;
+		s->accrle = 0;
 		
 		s->packet_id = packet_id;
 	}

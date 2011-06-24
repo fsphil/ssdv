@@ -90,6 +90,7 @@ typedef struct
 	uint8_t acpart;     /* 0 - 64; 0 = DC, 1 - 64 = AC                  */
 	int dc[COMPONENTS]; /* DC value for each component                  */
 	uint8_t acrle;      /* RLE value for current AC value               */
+	uint8_t accrle;     /* Accumulative RLE value                       */
 	char dcmode;        /* 0 = Absolute, 1 = Relative (parts 0, 4 & 5)  */
 	char needbits;      /* Number of bits needed to decode integer      */
 	
