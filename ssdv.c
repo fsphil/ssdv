@@ -687,7 +687,8 @@ char ssdv_enc_get_packet(ssdv_t *s)
 			{
 				/* Marker without data */
 				s->marker_len = 0;
-				ssdv_have_marker(s);
+				r = ssdv_have_marker(s);
+				if(r != SSDV_OK) return(r);
 			}
 			else if(s->marker >= J_SOF0 && s->marker <= J_COM)
 			{
@@ -703,7 +704,8 @@ char ssdv_enc_get_packet(ssdv_t *s)
 			if((s->needbits -= 8) == 0)
 			{
 				s->marker_len -= 2;
-				ssdv_have_marker(s);
+				r = ssdv_have_marker(s);
+				if(r != SSDV_OK) return(r);
 			}
 			break;
 		
@@ -711,7 +713,8 @@ char ssdv_enc_get_packet(ssdv_t *s)
 			s->marker_data[s->marker_data_len++] = b;
 			if(s->marker_data_len == s->marker_len)
 			{
-				ssdv_have_marker_data(s);
+				r = ssdv_have_marker_data(s);
+				if(r != SSDV_OK) return(r);
 			}
 			break;
 		
