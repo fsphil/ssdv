@@ -498,6 +498,11 @@ static char ssdv_have_marker(ssdv_t *s)
 		s->state           = S_MARKER_DATA;
 		break;
 	
+	case J_SOF2:
+		/* Don't do progressive images! */
+		fprintf(stderr, "Error: Progressive images not supported\n");
+		return(SSDV_ERROR);
+	
 	case J_DHT:
 	case J_DQT:
 		/* Copy the tables into memory */
@@ -552,6 +557,13 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		if(d[5] != 3)
 		{
 			fprintf(stderr, "Error: The image must have 3 components\n");
+			return(SSDV_ERROR);
+		}
+		
+		/* Maximum image is 4080x4080 */
+		if(s->width > 4080 || s->height > 4080)
+		{
+			fprintf(stderr, "Error: The image is too big. Maximum resolution is 4080x4080\n");
 			return(SSDV_ERROR);
 		}
 		
