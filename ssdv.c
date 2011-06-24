@@ -159,7 +159,7 @@ static inline char jpeg_dht_lookup(ssdv_t *s, uint8_t *symbol, uint8_t *width)
 	for(cw = 1; cw <= 16; cw++)
 	{
 		/* Got enough bits? */
-		if(cw >= s->worklen) return(SSDV_FEED_ME);
+		if(cw > s->worklen) return(SSDV_FEED_ME);
 		
 		/* Compare against each code 'cw' bits wide */
 		for(n = dht[cw]; n > 0; n--)
