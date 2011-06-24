@@ -549,6 +549,18 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			}
 			
 			fprintf(stderr, "DQT table for component %i: %02X, Sampling factor: %ix%i\n", dq[0], dq[2], dq[1] & 0x0F, dq[1] >> 4);
+			
+			/* The first component must have a factor of 2x2 and the rest 1x1 */
+			if(dq[0] == 1 && dq[1] != 0x22)
+			{
+				fprintf(stderr, "Error: Component 1 sampling factor must be 2x2\n");
+				return(SSDV_ERROR);
+			}
+			else if(dq[0] != 1 && dq[1] != 0x11)
+			{
+				fprintf(stderr, "Error: Component %i sampling factor must be 1x1\n", dq[0]);
+				return(SSDV_ERROR);
+			}
 		}
 		
 		break;
