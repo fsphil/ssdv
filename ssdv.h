@@ -89,16 +89,18 @@ typedef struct
 	uint8_t mcupart;    /* 0-3 = Y, 4 = Cb, 5 = Cr                      */
 	uint8_t acpart;     /* 0 - 64; 0 = DC, 1 - 64 = AC                  */
 	int dc[COMPONENTS]; /* DC value for each component                  */
+	int adc[COMPONENTS];/* DC adjusted value for each component         */
 	uint8_t acrle;      /* RLE value for current AC value               */
 	uint8_t accrle;     /* Accumulative RLE value                       */
-	char dcmode;        /* 0 = Absolute, 1 = Relative (parts 0, 4 & 5)  */
+	enum {
+		S_ENCODING = 0,
+		S_DECODING,
+	} mode;
+	uint32_t reset_mcu; /* MCU block to do absolute encoding            */
 	char needbits;      /* Number of bits needed to decode integer      */
 	
 	/* Small buffer for reading SOF0 and SOS header data into */
 	uint8_t hbuff[HBUFF_LEN];
-	
-	/* SSDV2 experiment */
-	int block[64];
 	
 } ssdv_t;
 

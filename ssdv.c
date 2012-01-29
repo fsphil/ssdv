@@ -314,9 +314,9 @@ static char ssdv_process(ssdv_t *s)
 			if(symbol == 0x00)
 			{
 				/* No change in DC from last block */
-				if(s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5)
+				if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5))
 				{
-					if(s->dcmode == 0) ssdv_out_jpeg_int(s, 0, AADJ(s->dc[s->component]));
+					if(s->mode == S_ENCODING) ssdv_out_jpeg_int(s, 0, s->adc[s->component]);
 					else
 					{
 						ssdv_out_jpeg_int(s, 0, 0 - s->dc[s->component]);
@@ -376,13 +376,14 @@ static char ssdv_process(ssdv_t *s)
 		
 		if(s->acpart == 0) /* DC */
 		{
-			if(s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5)
+			if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5))
 			{
-				if(s->dcmode == 0)
+				if(s->mode == S_ENCODING)
 				{
 					/* Output absolute DC value */
 					s->dc[s->component] += UADJ(i);
-					ssdv_out_jpeg_int(s, 0, AADJ(s->dc[s->component]));
+					s->adc[s->component] = AADJ(s->dc[s->component]);
+					ssdv_out_jpeg_int(s, 0, s->adc[s->component]);
 				}
 				else
 				{
@@ -393,9 +394,21 @@ static char ssdv_process(ssdv_t *s)
 			}
 			else
 			{
-				/* Output relative DC value */
-				s->dc[s->component] += UADJ(i);
-				ssdv_out_jpeg_int(s, 0, BADJ(i));
+				if(s->mode == S_DECODING)
+				{
+					s->dc[s->component] += UADJ(i);
+					ssdv_out_jpeg_int(s, 0, i);
+				}
+				else
+				{
+					/* Output relative DC value */
+					s->dc[s->component] += UADJ(i);
+					
+					/* Calculate closest adjusted DC value */
+				 	i = AADJ(s->dc[s->component]);
+					ssdv_out_jpeg_int(s, 0, i - s->adc[s->component]);
+					s->adc[s->component] = i;
+				}
 			}
 		}
 		else /* AC */
@@ -453,6 +466,7 @@ static char ssdv_process(ssdv_t *s)
 			/* Set the packet MCU marker - encoder only */
 			if(s->packet_mcu_id == 0xFFFF)
 			{
+				if(s->mode == S_ENCODING) s->reset_mcu = s->mcu_id;
 				s->packet_mcu_id = s->mcu_id;
 				s->packet_mcu_offset =
 					(SSDV_PKT_SIZE_PAYLOAD - s->out_len) * 8 + s->outlen;
@@ -677,6 +691,7 @@ char ssdv_enc_init(ssdv_t *s, uint8_t image_id)
 {
 	memset(s, 0, sizeof(ssdv_t));
 	s->image_id = image_id;
+	s->mode = S_ENCODING;
 	return(SSDV_OK);
 }
 
@@ -933,9 +948,7 @@ char ssdv_dec_init(ssdv_t *s)
 	
 	/* The packet data should contain only scan data, no headers */
 	s->state = S_HUFF;
-	
-	/* Converting absolute values to relative */
-	s->dcmode = 1;
+	s->mode = S_DECODING;
 	
 	return(SSDV_OK);
 }
@@ -964,6 +977,8 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	packet_id            = (packet[3] << 8) | packet[4];
 	s->packet_mcu_offset = (packet[7] << 8) | packet[8];
 	s->packet_mcu_id     = (packet[9] << 8) | packet[10];
+	
+	if(s->packet_mcu_id != 0xFFFF) s->reset_mcu = s->packet_mcu_id;
 	
 	/* If this is the first packet, write the JPEG headers */
 	if(s->packet_id == 0)
