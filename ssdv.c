@@ -405,7 +405,7 @@ static char ssdv_process(ssdv_t *s)
 					s->dc[s->component] += UADJ(i);
 					
 					/* Calculate closest adjusted DC value */
-				 	i = AADJ(s->dc[s->component]);
+					i = AADJ(s->dc[s->component]);
 					ssdv_out_jpeg_int(s, 0, i - s->adc[s->component]);
 					s->adc[s->component] = i;
 				}
