@@ -92,6 +92,7 @@ typedef struct
 	int adc[COMPONENTS];/* DC adjusted value for each component         */
 	uint8_t acrle;      /* RLE value for current AC value               */
 	uint8_t accrle;     /* Accumulative RLE value                       */
+	uint16_t dri;       /* Reset interval                               */
 	enum {
 		S_ENCODING = 0,
 		S_DECODING,

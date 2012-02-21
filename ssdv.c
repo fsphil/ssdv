@@ -471,6 +471,13 @@ static char ssdv_process(ssdv_t *s)
 				s->packet_mcu_offset =
 					(SSDV_PKT_SIZE_PAYLOAD - s->out_len) * 8 + s->outlen;
 			}
+			
+			/* Test for a reset marker */
+			if(s->dri > 0 && s->mcu_id > 0 && s->mcu_id % s->dri == 0)
+			{
+				s->state = S_MARKER;
+				return(SSDV_FEED_ME);
+			}
 		}
 		
 		if(s->mcupart < 4) s->component = 0;
@@ -500,6 +507,7 @@ static char ssdv_have_marker(ssdv_t *s)
 	{
 	case J_SOF0:
 	case J_SOS:
+	case J_DRI:
 		/* Copy the data before processing */
 		if(s->marker_len > HBUFF_LEN)
 		{
@@ -527,6 +535,21 @@ static char ssdv_have_marker(ssdv_t *s)
 	
 	case J_EOI:
 		s->state = S_EOI;
+		break;
+	
+	case J_RST0:
+	case J_RST1:
+	case J_RST2:
+	case J_RST3:
+	case J_RST4:
+	case J_RST5:
+	case J_RST6:
+	case J_RST7:
+		s->dc[0]  = s->dc[1]  = s->dc[2]  = 0;
+		s->mcupart = s->acpart = s->component = 0;
+		s->acrle = s->accrle = 0;
+		s->workbits = s->worklen = 0;
+		s->state = S_HUFF;
 		break;
 	
 	default:
@@ -667,6 +690,7 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			d += s;
 		}
 		break;
+	
 	case J_DQT:
 		while(l > 0)
 		{
@@ -680,6 +704,11 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			l -= 65;
 			d += 65;
 		}
+		break;
+	
+	case J_DRI:
+		s->dri = (d[0] << 8) + d[1];
+		fprintf(stderr, "Reset interval: %i blocks\n", s->dri);
 		break;
 	}
 	
