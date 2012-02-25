@@ -16,5 +16,4 @@ TODO
 * Allow the decoder to handle multiple images in the input stream.
 * Experiment with adaptive or multiple huffman tables.
 * Quality setting (4 bit / 16 quality levels).
-* Add a callsign field to each packet.
 
