@@ -1,7 +1,7 @@
 
 /* SSDV - Slow Scan Digital Video                                        */
 /*=======================================================================*/
-/* Copyright 2011 Philip Heron <phil@sanslogic.co.uk                     */
+/* Copyright 2011-2012 Philip Heron <phil@sanslogic.co.uk                */
 /*                                                                       */
 /* This program is free software: you can redistribute it and/or modify  */
 /* it under the terms of the GNU General Public License as published by  */
@@ -33,7 +33,7 @@ extern "C" {
 
 /* Packet details */
 #define SSDV_PKT_SIZE         (0x100)
-#define SSDV_PKT_SIZE_HEADER  (0x0B)
+#define SSDV_PKT_SIZE_HEADER  (0x0C)
 #define SSDV_PKT_SIZE_CRC     (0x02)
 #define SSDV_PKT_SIZE_RSCODES (0x20)
 #define SSDV_PKT_SIZE_PAYLOAD (SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES)
@@ -48,6 +48,7 @@ typedef struct
 	uint16_t height;
 	uint8_t image_id;
 	uint16_t packet_id;
+	uint8_t  mcu_mode;  /* 0 = 2x2, 1 = 2x1, 2 = 1x2, 3 = 1x1           */
 	uint16_t mcu_id;
 	uint16_t mcu_count;
 	uint16_t packet_mcu_id;
@@ -86,6 +87,7 @@ typedef struct
 	uint8_t *marker_data; /* Where to copy marker data too              */
 	uint16_t marker_data_len; /* How much is there                      */
 	uint8_t component;  /* 0 = Y, 1 = Cb, 2 = Cr                        */
+	uint8_t ycparts;    /* Number of Y component parts per MCU          */
 	uint8_t mcupart;    /* 0-3 = Y, 4 = Cb, 5 = Cr                      */
 	uint8_t acpart;     /* 0 - 64; 0 = DC, 1 - 64 = AC                  */
 	int dc[COMPONENTS]; /* DC value for each component                  */
@@ -110,6 +112,7 @@ typedef struct {
 	uint16_t packet_id;
 	uint16_t width;
 	uint16_t height;
+	uint16_t mcu_mode;
 	uint16_t mcu_offset;
 	uint16_t mcu_id;
 	uint16_t mcu_count;

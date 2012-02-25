@@ -1,7 +1,7 @@
 
 /* SSDV - Slow Scan Digital Video                                        */
 /*=======================================================================*/
-/* Copyright 2011 Philip Heron <phil@sanslogic.co.uk                     */
+/* Copyright 2011-2012 Philip Heron <phil@sanslogic.co.uk                */
 /*                                                                       */
 /* This program is free software: you can redistribute it and/or modify  */
 /* it under the terms of the GNU General Public License as published by  */
@@ -314,7 +314,7 @@ static char ssdv_process(ssdv_t *s)
 			if(symbol == 0x00)
 			{
 				/* No change in DC from last block */
-				if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5))
+				if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart >= s->ycparts))
 				{
 					if(s->mode == S_ENCODING) ssdv_out_jpeg_int(s, 0, s->adc[s->component]);
 					else
@@ -376,7 +376,7 @@ static char ssdv_process(ssdv_t *s)
 		
 		if(s->acpart == 0) /* DC */
 		{
-			if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart == 4 || s->mcupart == 5))
+			if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart >= s->ycparts))
 			{
 				if(s->mode == S_ENCODING)
 				{
@@ -450,7 +450,7 @@ static char ssdv_process(ssdv_t *s)
 	if(s->acpart >= 64)
 	{
 		/* Reached the end of this MCU part */
-		if(++s->mcupart == 6)
+		if(++s->mcupart == s->ycparts + 2)
 		{
 			s->mcupart = 0;
 			s->mcu_id++;
@@ -480,8 +480,8 @@ static char ssdv_process(ssdv_t *s)
 			}
 		}
 		
-		if(s->mcupart < 4) s->component = 0;
-		else s->component = s->mcupart - 3;
+		if(s->mcupart < s->ycparts) s->component = 0;
+		else s->component = s->mcupart - s->ycparts + 1;
 		
 		s->acpart = 0;
 		s->accrle = 0;
@@ -574,14 +574,10 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		s->width  = (d[3] << 8) | d[4];
 		s->height = (d[1] << 8) | d[2];
 		
-		/* Calculate number of MCU blocks in this image -- assumes 16x16 blocks */
-		s->mcu_count = (s->width >> 4) * (s->height >> 4);
-		
 		/* Display information about the image... */
 		fprintf(stderr, "Precision: %i\n", d[0]);
 		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
 		fprintf(stderr, "Components: %i\n", d[5]);
-		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
 		
 		/* The image must have a precision of 8 */
 		if(d[0] != 8)
@@ -624,11 +620,19 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			
 			fprintf(stderr, "DQT table for component %i: %02X, Sampling factor: %ix%i\n", dq[0], dq[2], dq[1] & 0x0F, dq[1] >> 4);
 			
-			/* The first component must have a factor of 2x2 and the rest 1x1 */
-			if(dq[0] == 1 && dq[1] != 0x22)
+			/* The first (Y) component must have a factor of 2x2,2x1,1x2 or 1x1 */
+			if(dq[0] == 1)
 			{
-				fprintf(stderr, "Error: Component 1 sampling factor must be 2x2\n");
-				return(SSDV_ERROR);
+				switch(dq[1])
+				{
+				case 0x22: s->mcu_mode = 0; s->ycparts = 4; break;
+				case 0x12: s->mcu_mode = 1; s->ycparts = 2; break;
+				case 0x21: s->mcu_mode = 2; s->ycparts = 2; break;
+				case 0x11: s->mcu_mode = 3; s->ycparts = 1; break;
+				default:
+					fprintf(stderr, "Error: Component 1 sampling factor is not supported\n");
+					return(SSDV_ERROR);
+				}
 			}
 			else if(dq[0] != 1 && dq[1] != 0x11)
 			{
@@ -636,6 +640,17 @@ static char ssdv_have_marker_data(ssdv_t *s)
 				return(SSDV_ERROR);
 			}
 		}
+		
+		/* Calculate number of MCU blocks in this image */
+		switch(s->mcu_mode)
+		{
+		case 0: s->mcu_count = (s->width >> 4) * (s->height >> 4); break;
+		case 1: s->mcu_count = (s->width >> 4) * (s->height >> 3); break;
+		case 2: s->mcu_count = (s->width >> 3) * (s->height >> 4); break;
+		case 3: s->mcu_count = (s->width >> 3) * (s->height >> 3); break;
+		}
+		
+		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
 		
 		break;
 	
@@ -838,10 +853,11 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				s->out[4]  = s->packet_id & 0xFF; /* Packet ID LSB */
 				s->out[5]  = s->width >> 4;       /* Width / 16 */
 				s->out[6]  = s->height >> 4;      /* Height / 16 */
-				s->out[7]  = mcu_offset >> 8;     /* Next MCU offset MSB */
-				s->out[8]  = mcu_offset & 0xFF;   /* Next MCU offset LSB */
-				s->out[9]  = mcu_id >> 8;         /* MCU ID MSB */
-				s->out[10] = mcu_id & 0xFF;       /* MCU ID LSB */
+				s->out[7]  = s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
+				s->out[8]  = mcu_offset >> 8;     /* Next MCU offset MSB */
+				s->out[9]  = mcu_offset & 0xFF;   /* Next MCU offset LSB */
+				s->out[10] = mcu_id >> 8;         /* MCU ID MSB */
+				s->out[11] = mcu_id & 0xFF;       /* MCU ID LSB */
 				
 				/* Fill any remaining bytes with noise */
 				if(s->out_len > 0) ssdv_memset_prng(s->outp, s->out_len);
@@ -917,7 +933,13 @@ static void ssdv_out_headers(ssdv_t *s)
 	b[4]  = s->width & 0xFF;
 	b[5]  = 3; /* Components (Y'Cb'Cr) */
 	b[6]  = 1; /* Y */
-	b[7]  = 0x22;
+	switch(s->mcu_mode)
+	{
+	case 0: b[7] = 0x22; break;
+	case 1: b[7] = 0x12; break;
+	case 2: b[7] = 0x21; break;
+	case 3: b[7] = 0x11; break;
+	}
 	b[8]  = 0x00;
 	b[9]  = 2; /* Cb */
 	b[10] = 0x11;
@@ -946,10 +968,10 @@ static void ssdv_fill_gap(ssdv_t *s, uint16_t next_mcu)
 		}
 		
 		/* End the current MCU block */
-		for(; s->mcupart < 6; s->mcupart++)
+		for(; s->mcupart < s->ycparts + 2; s->mcupart++)
 		{
-			if(s->mcupart < 4) s->component = 0;
-			else s->component = s->mcupart - 3;
+			if(s->mcupart < s->ycparts) s->component = 0;
+			else s->component = s->mcupart - s->ycparts + 1;
 			s->acpart = 0; ssdv_out_jpeg_int(s, 0, 0); /* DC */
 			s->acpart = 1; ssdv_out_jpeg_int(s, 0, 0); /* AC */
 		}
@@ -961,10 +983,10 @@ static void ssdv_fill_gap(ssdv_t *s, uint16_t next_mcu)
 	for(; s->mcu_id < next_mcu; s->mcu_id++)
 	{
 		/* End the current MCU block */
-		for(s->mcupart = 0; s->mcupart < 6; s->mcupart++)
+		for(s->mcupart = 0; s->mcupart < s->ycparts + 2; s->mcupart++)
 		{
-			if(s->mcupart < 4) s->component = 0;
-			else s->component = s->mcupart - 3;
+			if(s->mcupart < s->ycparts) s->component = 0;
+			else s->component = s->mcupart - s->ycparts + 1;
 			s->acpart = 0; ssdv_out_jpeg_int(s, 0, 0); /* DC */
 			s->acpart = 1; ssdv_out_jpeg_int(s, 0, 0); /* AC */
 		}                         
@@ -1004,19 +1026,36 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	
 	/* Read the packet header */
 	packet_id            = (packet[3] << 8) | packet[4];
-	s->packet_mcu_offset = (packet[7] << 8) | packet[8];
-	s->packet_mcu_id     = (packet[9] << 8) | packet[10];
+	s->packet_mcu_offset = (packet[8] << 8) | packet[9];
+	s->packet_mcu_id     = (packet[10] << 8) | packet[11];
 	
 	if(s->packet_mcu_id != 0xFFFF) s->reset_mcu = s->packet_mcu_id;
 	
 	/* If this is the first packet, write the JPEG headers */
 	if(s->packet_id == 0)
 	{
+		const char *factor;
+		
 		/* Read the fixed headers from the packet */
 		s->image_id  = packet[2];
 		s->width     = packet[5] << 4;
 		s->height    = packet[6] << 4;
 		s->mcu_count = packet[5] * packet[6];
+		s->mcu_mode  = packet[7] & 0x03;
+		
+		switch(s->mcu_mode)
+		{
+		case 0: factor = "2x2"; s->ycparts = 4; break;
+		case 1: factor = "1x2"; s->ycparts = 2; s->mcu_count *= 2; break;
+		case 2: factor = "2x1"; s->ycparts = 2; s->mcu_count *= 2; break;
+		case 3: factor = "1x1"; s->ycparts = 1; s->mcu_count *= 4; break;
+		}
+		
+		/* Display information about the image */
+		fprintf(stderr, "Image ID: %02X\n", s->image_id);
+		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
+		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
+		fprintf(stderr, "Sampling factor: %s\n", factor);
 		
 		/* Output JPEG headers and enable byte stuffing */
 		ssdv_out_headers(s);
@@ -1160,9 +1199,12 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 	info->packet_id  = (packet[3] << 8) | packet[4];
 	info->width      = packet[5] << 4;
 	info->height     = packet[6] << 4;
-	info->mcu_offset = (packet[7] << 8) | packet[8];
-	info->mcu_id     = (packet[9] << 8) | packet[10];
+	info->mcu_mode   = packet[7] & 0x03;
+	info->mcu_offset = (packet[8] << 8) | packet[9];
+	info->mcu_id     = (packet[10] << 8) | packet[11];
 	info->mcu_count  = packet[5] * packet[6];
+	if(info->mcu_mode == 1 || info->mcu_mode == 2) info->mcu_count *= 2;
+	else if(info->mcu_mode == 3) info->mcu_count *= 4;
 }
 
 /*****************************************************************************/
