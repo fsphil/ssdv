@@ -25,7 +25,7 @@
 
 void exit_usage()
 {
-	fprintf(stderr, "Usage: ssdv [-e|-d] [-t <percentage>] [-i <id>] [<in file>] [<out file>]\n");
+	fprintf(stderr, "Usage: ssdv [-e|-d] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
 	exit(-1);
 }
 
@@ -36,19 +36,27 @@ int main(int argc, char *argv[])
 	FILE *fout = stdout;
 	char encode = -1;
 	int droptest = 0;
+	char callsign[7];
 	uint8_t image_id = 0;
 	ssdv_t ssdv;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;
 	size_t jpeg_length;
 	
+	callsign[0] = '\0';
+	
 	opterr = 0;
-	while((c = getopt(argc, argv, "edi:t:")) != -1)
+	while((c = getopt(argc, argv, "edc:i:t:")) != -1)
 	{
 		switch(c)
 		{
 		case 'e': encode = 1; break;
 		case 'd': encode = 0; break;
+		case 'c':
+			if(strlen(optarg) > 6)
+				fprintf(stderr, "Warning: callsign is longer than 6 characters.\n");
+			strncpy(callsign, optarg, 6);
+			break;
 		case 'i': image_id = atoi(optarg); break;
 		case 't': droptest = atoi(optarg); break;
 		case '?': exit_usage();
@@ -120,7 +128,7 @@ int main(int argc, char *argv[])
 		break;
 	
 	case 1: /* Encode */
-		ssdv_enc_init(&ssdv, image_id);
+		ssdv_enc_init(&ssdv, callsign, image_id);
 		ssdv_enc_set_buffer(&ssdv, pkt);
 		
 		i = 0;

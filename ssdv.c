@@ -154,6 +154,50 @@ uint16_t crc_xmodem_update(uint16_t crc, uint8_t data)
 }
 #endif
 
+static uint32_t encode_callsign(char *callsign)
+{
+	uint32_t x;
+	char *c;
+	
+	/* Point c at the end of the callsign */
+	for(c = callsign; *c; c++);
+	
+	/* Encode it backwards */
+	x = 0;
+	for(c--; c >= callsign; c--)
+	{
+		x *= 40;
+		if(*c >= 'A' && *c <= 'Z') x += *c - 'A' + 14;
+		else if(*c >= 'a' && *c <= 'z') x += *c - 'a' + 14;
+		else if(*c >= '0' && *c <= '9') x += *c - '0' + 1;
+	}
+	
+	return(x);
+}
+
+static char *decode_callsign(char *callsign, uint32_t code)
+{
+	char *c, s;
+	
+	*callsign = '\0';
+	
+	/* Is callsign valid? */
+	if(code > 0xF423FFFF) return(0);
+	
+	for(c = callsign; code; c++)
+	{
+		s = code % 40;
+		if(s == 0) *c = '-';
+		else if(s < 11) *c = '0' + s - 1;
+		else if(s < 14) *c = '-';
+		else *c = 'A' + s - 14;
+		code /= 40;
+	}
+	*c = '\0';
+	
+	return(callsign);
+}
+
 static inline char jpeg_dht_lookup(ssdv_t *s, uint8_t *symbol, uint8_t *width)
 {
 	uint16_t code = 0;
@@ -731,10 +775,11 @@ static char ssdv_have_marker_data(ssdv_t *s)
 	return(SSDV_OK);
 }
 
-char ssdv_enc_init(ssdv_t *s, uint8_t image_id)
+char ssdv_enc_init(ssdv_t *s, char *callsign, uint8_t image_id)
 {
 	memset(s, 0, sizeof(ssdv_t));
 	s->image_id = image_id;
+	s->callsign = encode_callsign(callsign);
 	s->mode = S_ENCODING;
 	return(SSDV_OK);
 }
@@ -848,16 +893,20 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				/* A packet is ready, create the headers */
 				s->out[0]  = 0x55;                /* Sync */
 				s->out[1]  = 0x66;                /* Type */
-				s->out[2]  = s->image_id;         /* Image ID */
-				s->out[3]  = s->packet_id >> 8;   /* Packet ID MSB */
-				s->out[4]  = s->packet_id & 0xFF; /* Packet ID LSB */
-				s->out[5]  = s->width >> 4;       /* Width / 16 */
-				s->out[6]  = s->height >> 4;      /* Height / 16 */
-				s->out[7]  = s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
-				s->out[8]  = mcu_offset >> 8;     /* Next MCU offset MSB */
-				s->out[9]  = mcu_offset & 0xFF;   /* Next MCU offset LSB */
-				s->out[10] = mcu_id >> 8;         /* MCU ID MSB */
-				s->out[11] = mcu_id & 0xFF;       /* MCU ID LSB */
+				s->out[2]  = s->callsign >> 24;
+				s->out[3]  = s->callsign >> 16;
+				s->out[4]  = s->callsign >> 8;
+				s->out[5]  = s->callsign;
+				s->out[6]  = s->image_id;         /* Image ID */
+				s->out[7]  = s->packet_id >> 8;   /* Packet ID MSB */
+				s->out[8]  = s->packet_id & 0xFF; /* Packet ID LSB */
+				s->out[9]  = s->width >> 4;       /* Width / 16 */
+				s->out[10] = s->height >> 4;      /* Height / 16 */
+				s->out[11] = s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
+				s->out[12] = mcu_offset >> 8;     /* Next MCU offset MSB */
+				s->out[13] = mcu_offset & 0xFF;   /* Next MCU offset LSB */
+				s->out[14] = mcu_id >> 8;         /* MCU ID MSB */
+				s->out[15] = mcu_id & 0xFF;       /* MCU ID LSB */
 				
 				/* Fill any remaining bytes with noise */
 				if(s->out_len > 0) ssdv_memset_prng(s->outp, s->out_len);
@@ -1025,9 +1074,9 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	uint16_t packet_id;
 	
 	/* Read the packet header */
-	packet_id            = (packet[3] << 8) | packet[4];
-	s->packet_mcu_offset = (packet[8] << 8) | packet[9];
-	s->packet_mcu_id     = (packet[10] << 8) | packet[11];
+	packet_id            = (packet[7] << 8) | packet[8];
+	s->packet_mcu_offset = (packet[12] << 8) | packet[13];
+	s->packet_mcu_id     = (packet[14] << 8) | packet[15];
 	
 	if(s->packet_mcu_id != 0xFFFF) s->reset_mcu = s->packet_mcu_id;
 	
@@ -1035,13 +1084,15 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	if(s->packet_id == 0)
 	{
 		const char *factor;
+		char callsign[7];
 		
 		/* Read the fixed headers from the packet */
-		s->image_id  = packet[2];
-		s->width     = packet[5] << 4;
-		s->height    = packet[6] << 4;
-		s->mcu_count = packet[5] * packet[6];
-		s->mcu_mode  = packet[7] & 0x03;
+		s->callsign  = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
+		s->image_id  = packet[6];
+		s->width     = packet[9] << 4;
+		s->height    = packet[10] << 4;
+		s->mcu_count = packet[9] * packet[10];
+		s->mcu_mode  = packet[11] & 0x03;
 		
 		switch(s->mcu_mode)
 		{
@@ -1052,6 +1103,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		}
 		
 		/* Display information about the image */
+		fprintf(stderr, "Callsign: %s\n", decode_callsign(callsign, s->callsign));
 		fprintf(stderr, "Image ID: %02X\n", s->image_id);
 		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
 		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
@@ -1195,14 +1247,15 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 
 void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 {
-	info->image_id   = packet[2];
-	info->packet_id  = (packet[3] << 8) | packet[4];
-	info->width      = packet[5] << 4;
-	info->height     = packet[6] << 4;
-	info->mcu_mode   = packet[7] & 0x03;
-	info->mcu_offset = (packet[8] << 8) | packet[9];
-	info->mcu_id     = (packet[10] << 8) | packet[11];
-	info->mcu_count  = packet[5] * packet[6];
+	info->callsign  = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
+	info->image_id   = packet[6];
+	info->packet_id  = (packet[7] << 8) | packet[8];
+	info->width      = packet[9] << 4;
+	info->height     = packet[10] << 4;
+	info->mcu_mode   = packet[11] & 0x03;
+	info->mcu_offset = (packet[12] << 8) | packet[13];
+	info->mcu_id     = (packet[14] << 8) | packet[15];
+	info->mcu_count  = packet[9] * packet[10];
 	if(info->mcu_mode == 1 || info->mcu_mode == 2) info->mcu_count *= 2;
 	else if(info->mcu_mode == 3) info->mcu_count *= 4;
 }
