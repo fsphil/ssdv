@@ -182,7 +182,7 @@ static char *decode_callsign(char *callsign, uint32_t code)
 	*callsign = '\0';
 	
 	/* Is callsign valid? */
-	if(code > 0xF423FFFF) return(0);
+	if(code > 0xF423FFFF) return(callsign);
 	
 	for(c = callsign; code; c++)
 	{
