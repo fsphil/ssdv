@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 #include "ssdv.h"
 #include "rs8.h"
 
@@ -123,9 +124,9 @@ static uint8_t *dht_ac[3] = { std_dht10, std_dht11, std_dht11 };
 #define DDQT (dqt[s->component][1 + s->acpart])
 
 /* Helpers for converting between DQT tables */
-#define AADJ(i) (SDQT == DDQT ? (i) : (i / DDQT))
-#define UADJ(i) (SDQT == DDQT ? (i) : (i * SDQT))
-#define BADJ(i) (SDQT == DDQT ? (i) : (i * SDQT / DDQT))
+#define AADJ(i) (SDQT == DDQT ? (i) : round((double) i / DDQT))
+#define UADJ(i) (SDQT == DDQT ? (i) : round((double) i * SDQT))
+#define BADJ(i) (SDQT == DDQT ? (i) : round((double) i * SDQT / DDQT))
 
 /*
 static char *strbits(uint32_t value, uint8_t bits)

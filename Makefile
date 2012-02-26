@@ -1,7 +1,7 @@
 
 CC=gcc
 CFLAGS=-g -Wall
-LDFLAGS=-g
+LDFLAGS=-g -lm
 
 ssdv: main.o ssdv.o rs8.o
 	$(CC) $(LDFLAGS) main.o ssdv.o rs8.o -o ssdv
