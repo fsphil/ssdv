@@ -689,13 +689,21 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		/* Calculate number of MCU blocks in this image */
 		switch(s->mcu_mode)
 		{
-		case 0: s->mcu_count = (s->width >> 4) * (s->height >> 4); break;
-		case 1: s->mcu_count = (s->width >> 4) * (s->height >> 3); break;
-		case 2: s->mcu_count = (s->width >> 3) * (s->height >> 4); break;
-		case 3: s->mcu_count = (s->width >> 3) * (s->height >> 3); break;
+		case 0: l = (s->width >> 4) * (s->height >> 4); break;
+		case 1: l = (s->width >> 4) * (s->height >> 3); break;
+		case 2: l = (s->width >> 3) * (s->height >> 4); break;
+		case 3: l = (s->width >> 3) * (s->height >> 3); break;
 		}
 		
-		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
+		fprintf(stderr, "MCU blocks: %i\n", l);
+		
+		if(l > 0xFFFF)
+		{
+			fprintf(stderr, "Error: Maximum number of MCU blocks is 65535\n");
+			return(SSDV_ERROR);
+		}
+		
+		s->mcu_count = l;
 		
 		break;
 	
