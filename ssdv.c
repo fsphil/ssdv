@@ -17,7 +17,6 @@
 /* along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -38,17 +37,17 @@ enum {
 } jpeg_marker_t;
 
 /* APP0 header data */
-static uint8_t app0[14] = {
+static const uint8_t const app0[14] = {
 0x4A,0x46,0x49,0x46,0x00,0x01,0x01,0x01,0x00,0x48,0x00,0x48,0x00,0x00,
 };
 
 /* SOS header data */
-static uint8_t sos[10] = {
+static const uint8_t const sos[10] = {
 0x03,0x01,0x00,0x02,0x11,0x03,0x11,0x00,0x3F,0x00,
 };
 
 /* Quantisation tables */
-static uint8_t std_dqt0[65] = {
+static const uint8_t const std_dqt0[65] = {
 0x00,0x10,0x0C,0x0C,0x0E,0x0C,0x0A,0x10,0x0E,0x0E,0x0E,0x12,0x12,0x10,0x14,0x18,
 0x28,0x1A,0x18,0x16,0x16,0x18,0x32,0x24,0x26,0x1E,0x28,0x3A,0x34,0x3E,0x3C,0x3A,
 0x34,0x38,0x38,0x40,0x48,0x5C,0x4E,0x40,0x44,0x58,0x46,0x38,0x38,0x50,0x6E,0x52,
@@ -56,7 +55,7 @@ static uint8_t std_dqt0[65] = {
 0x64,
 };
 
-static uint8_t std_dqt1[65] = {
+static const uint8_t const std_dqt1[65] = {
 0x01,0x12,0x12,0x12,0x16,0x16,0x16,0x30,0x1A,0x1A,0x30,0x64,0x42,0x38,0x42,0x64,
 0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,
 0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,0x64,
@@ -64,24 +63,18 @@ static uint8_t std_dqt1[65] = {
 0x64,
 };
 
-/* Decoding DQT -- for input file */
-static uint8_t *sdqt[3] = { std_dqt0, std_dqt1, std_dqt1 };
-
-/* Encoding DQT -- for output */
-static uint8_t *dqt[3] = { std_dqt0, std_dqt1, std_dqt1 };
-
 /* Standard Huffman tables */
-static uint8_t std_dht00[29] = {
+static const uint8_t std_dht00[29] = {
 0x00,0x00,0x01,0x05,0x01,0x01,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,
 0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,
 };
 
-static uint8_t std_dht01[29] = {
+static const uint8_t std_dht01[29] = {
 0x01,0x00,0x03,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x00,
 0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,
 };
 
-static uint8_t std_dht10[179] = {
+static const uint8_t std_dht10[179] = {
 0x10,0x00,0x02,0x01,0x03,0x03,0x02,0x04,0x03,0x05,0x05,0x04,0x04,0x00,0x00,0x01,
 0x7D,0x01,0x02,0x03,0x00,0x04,0x11,0x05,0x12,0x21,0x31,0x41,0x06,0x13,0x51,0x61,
 0x07,0x22,0x71,0x14,0x32,0x81,0x91,0xA1,0x08,0x23,0x42,0xB1,0xC1,0x15,0x52,0xD1,
@@ -96,7 +89,7 @@ static uint8_t std_dht10[179] = {
 0xF8,0xF9,0xFA,
 };
 
-static uint8_t std_dht11[179] = {
+static const uint8_t std_dht11[179] = {
 0x11,0x00,0x02,0x01,0x02,0x04,0x04,0x03,0x04,0x07,0x05,0x04,0x04,0x00,0x01,0x02,
 0x77,0x00,0x01,0x02,0x03,0x11,0x04,0x05,0x21,0x31,0x06,0x12,0x41,0x51,0x07,0x61,
 0x71,0x13,0x22,0x32,0x81,0x08,0x14,0x42,0x91,0xA1,0xB1,0xC1,0x09,0x23,0x33,0x52,
@@ -111,17 +104,13 @@ static uint8_t std_dht11[179] = {
 0xF8,0xF9,0xFA,
 };
 
-/* Decoding DHT -- for input file */
-static uint8_t *sdht_dc[3] = { std_dht00, std_dht01, std_dht01 };
-static uint8_t *sdht_ac[3] = { std_dht10, std_dht11, std_dht11 };
+/* Helper for returning the current DHT table */
+#define SDHT (s->sdht[s->acpart ? 1 : 0][s->component ? 1 : 0])
+#define DDHT (s->ddht[s->acpart ? 1 : 0][s->component ? 1 : 0])
 
-/* Encoding DHT -- for output */
-static uint8_t *dht_dc[3] = { std_dht00, std_dht01, std_dht01 };
-static uint8_t *dht_ac[3] = { std_dht10, std_dht11, std_dht11 };
-
-/* Helpers for looking up the current DQT values */
-#define SDQT (sdqt[s->component][1 + s->acpart])
-#define DDQT (dqt[s->component][1 + s->acpart])
+/* Helpers for looking up the current DQT value */
+#define SDQT (s->sdqt[s->component ? 1 : 0][1 + s->acpart])
+#define DDQT (s->ddqt[s->component ? 1 : 0][1 + s->acpart])
 
 /* Helpers for converting between DQT tables */
 #define AADJ(i) (SDQT == DDQT ? (i) : round((double) i / DDQT))
@@ -138,6 +127,24 @@ static char *strbits(uint32_t value, uint8_t bits)
 	return(s);
 }
 */
+
+static void *stblcpy(ssdv_t *s, const void *src, size_t n)
+{
+	void *r;
+	if(s->stbl_len + n > TBL_LEN + HBUFF_LEN) return(NULL);
+	r = memcpy(&s->stbls[s->stbl_len], src, n);
+	s->stbl_len += n;
+	return(r);
+}
+
+static void *dtblcpy(ssdv_t *s, const void *src, size_t n)
+{
+	void *r;
+	if(s->dtbl_len + n > TBL_LEN) return(NULL);
+	r = memcpy(&s->dtbls[s->dtbl_len], src, n);
+	s->dtbl_len += n;
+	return(r);
+}
 
 #ifndef crc_xmodem_update
 uint16_t crc_xmodem_update(uint16_t crc, uint8_t data)
@@ -206,8 +213,7 @@ static inline char jpeg_dht_lookup(ssdv_t *s, uint8_t *symbol, uint8_t *width)
 	uint8_t *dht, *ss;
 	
 	/* Select the appropriate huffman table */
-	if(s->acpart == 0) dht = sdht_dc[s->component];
-	else               dht = sdht_ac[s->component];
+	dht = SDHT;
 	ss = &dht[17];
 	
 	for(cw = 1; cw <= 16; cw++)
@@ -235,10 +241,14 @@ static inline char jpeg_dht_lookup(ssdv_t *s, uint8_t *symbol, uint8_t *width)
 	return(SSDV_ERROR);
 }
 
-static inline char jpeg_dht_lookup_symbol(uint8_t *dht, uint8_t symbol, uint16_t *bits, uint8_t *width)
+static inline char jpeg_dht_lookup_symbol(ssdv_t *s, uint8_t symbol, uint16_t *bits, uint8_t *width)
 {
 	uint16_t code = 0;
-	uint8_t cw, n, *ss = &dht[17];
+	uint8_t cw, n;
+	uint8_t *dht, *ss;
+	
+	dht = DDHT;
+	ss = &dht[17];
 	
 	for(cw = 1; cw <= 16; cw++)
 	{
@@ -325,15 +335,10 @@ static char ssdv_out_jpeg_int(ssdv_t *s, uint8_t rle, int value)
 	uint16_t huffbits = 0;
 	int intbits;
 	uint8_t hufflen = 0, intlen;
-	uint8_t *dht;
 	int r;
 	
-	/* Select the appropriate huffman table */
-	if(s->acpart == 0) dht = dht_dc[s->component];
-	else               dht = dht_ac[s->component];
-	
 	jpeg_encode_int(value, &intbits, &intlen);
-	r = jpeg_dht_lookup_symbol(dht, (rle << 4) | (intlen & 0x0F), &huffbits, &hufflen);
+	r = jpeg_dht_lookup_symbol(s, (rle << 4) | (intlen & 0x0F), &huffbits, &hufflen);
 	
 	if(r != SSDV_OK) fprintf(stderr, "jpeg_dht_lookup_symbol: %i (%i:%i)\n", r, value, rle);
 	
@@ -553,14 +558,16 @@ static char ssdv_have_marker(ssdv_t *s)
 	case J_SOF0:
 	case J_SOS:
 	case J_DRI:
+	case J_DHT:
+	case J_DQT:
 		/* Copy the data before processing */
-		if(s->marker_len > HBUFF_LEN)
+		if(s->marker_len > TBL_LEN + HBUFF_LEN - s->stbl_len)
 		{
 			/* Not enough memory ... shouldn't happen! */
 			return(SSDV_ERROR);
 		}
 		
-		s->marker_data     = s->hbuff;
+		s->marker_data     = &s->stbls[s->stbl_len];
 		s->marker_data_len = 0;
 		s->state           = S_MARKER_DATA;
 		break;
@@ -569,14 +576,6 @@ static char ssdv_have_marker(ssdv_t *s)
 		/* Don't do progressive images! */
 		fprintf(stderr, "Error: Progressive images not supported\n");
 		return(SSDV_ERROR);
-	
-	case J_DHT:
-	case J_DQT:
-		/* Copy the tables into memory */
-		s->marker_data     = malloc(s->marker_len);
-		s->marker_data_len = 0;
-		s->state           = S_MARKER_DATA;
-		break;
 	
 	case J_EOI:
 		s->state = S_EOI;
@@ -732,40 +731,56 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		/* Do I need to look at the last three bytes of the SOS data? */
 		/* 00 3F 00 */
 		
+		/* Verify all of the DQT and DHT tables where loaded */
+		if(!s->sdqt[0] || !s->sdqt[1])
+		{
+			fprintf(stderr, "Error: The image is missing one or more DQT tables\n");
+			return(SSDV_ERROR);
+		}
+		
+		if(!s->sdht[0][0] || !s->sdht[0][1] ||
+		   !s->sdht[1][0] || !s->sdht[1][1])
+		{
+			fprintf(stderr, "Error: The image is missing one or more DHT tables\n");
+			return(SSDV_ERROR);
+		}
+		
 		/* The SOS data is followed by the image data */
 		s->state = S_HUFF;
 		
 		return(SSDV_OK);
 	
 	case J_DHT:
+		s->stbl_len += l;
 		while(l > 0)
 		{
-			int i, s;
+			int i, j;
 			
 			switch(d[0])
 			{
-			case 0x00: sdht_dc[0] = d; break;
-			case 0x01: sdht_dc[1] = sdht_dc[2] = d; break;
-			case 0x10: sdht_ac[0] = d; break;
-			case 0x11: sdht_ac[1] = sdht_ac[2] = d; break;
+			case 0x00: s->sdht[0][0] = d; break;
+			case 0x01: s->sdht[0][1] = d; break;
+			case 0x10: s->sdht[1][0] = d; break;
+			case 0x11: s->sdht[1][1] = d; break;
 			}
 			
 			/* Skip to the next DHT table */
-			for(s = 17, i = 1; i <= 16; i++)
-				s += d[i];
+			for(j = 17, i = 1; i <= 16; i++)
+				j += d[i];
 			
-			l -= s;
-			d += s;
+			l -= j;
+			d += j;
 		}
 		break;
 	
 	case J_DQT:
+		s->stbl_len += l;
 		while(l > 0)
 		{
 			switch(d[0])
 			{
-			case 0x00: sdqt[0] = d; break;
-			case 0x01: sdqt[1] = sdqt[2] = d; break;
+			case 0x00: s->sdqt[0] = d; break;
+			case 0x01: s->sdqt[1] = d; break;
 			}
 			
 			/* Skip to the next one, if present */
@@ -790,6 +805,15 @@ char ssdv_enc_init(ssdv_t *s, char *callsign, uint8_t image_id)
 	s->image_id = image_id;
 	s->callsign = encode_callsign(callsign);
 	s->mode = S_ENCODING;
+	
+	/* Prepare the output JPEG tables */
+	s->ddqt[0] = dtblcpy(s, std_dqt0, sizeof(std_dqt0));
+	s->ddqt[1] = dtblcpy(s, std_dqt1, sizeof(std_dqt1));
+	s->ddht[0][0] = dtblcpy(s, std_dht00, sizeof(std_dht00));
+	s->ddht[0][1] = dtblcpy(s, std_dht01, sizeof(std_dht01));
+	s->ddht[1][0] = dtblcpy(s, std_dht10, sizeof(std_dht10));
+	s->ddht[1][1] = dtblcpy(s, std_dht11, sizeof(std_dht11));
+	
 	return(SSDV_OK);
 }
 
@@ -964,7 +988,7 @@ char ssdv_enc_feed(ssdv_t *s, uint8_t *buffer, size_t length)
 
 /*****************************************************************************/
 
-static void ssdv_write_marker(ssdv_t *s, uint16_t id, uint16_t length, uint8_t *data)
+static void ssdv_write_marker(ssdv_t *s, uint16_t id, uint16_t length, const uint8_t *data)
 {
 	ssdv_outbits(s, id, 16);
 	if(length > 0)
@@ -976,7 +1000,7 @@ static void ssdv_write_marker(ssdv_t *s, uint16_t id, uint16_t length, uint8_t *
 
 static void ssdv_out_headers(ssdv_t *s)
 {
-	uint8_t *b = s->hbuff;
+	uint8_t *b = &s->stbls[s->stbl_len];
 	
 	ssdv_write_marker(s, J_SOI,    0, 0);
 	ssdv_write_marker(s, J_APP0,  14, app0);
@@ -1058,6 +1082,22 @@ char ssdv_dec_init(ssdv_t *s)
 	/* The packet data should contain only scan data, no headers */
 	s->state = S_HUFF;
 	s->mode = S_DECODING;
+	
+	/* Prepare the source JPEG tables */
+	s->sdqt[0] = stblcpy(s, std_dqt0, sizeof(std_dqt0));
+	s->sdqt[1] = stblcpy(s, std_dqt1, sizeof(std_dqt1));
+	s->sdht[0][0] = stblcpy(s, std_dht00, sizeof(std_dht00));
+	s->sdht[0][1] = stblcpy(s, std_dht01, sizeof(std_dht01));
+	s->sdht[1][0] = stblcpy(s, std_dht10, sizeof(std_dht10));
+	s->sdht[1][1] = stblcpy(s, std_dht11, sizeof(std_dht11));
+	
+	/* Prepare the output JPEG tables */
+	s->ddqt[0] = dtblcpy(s, std_dqt0, sizeof(std_dqt0));
+	s->ddqt[1] = dtblcpy(s, std_dqt1, sizeof(std_dqt1));
+	s->ddht[0][0] = dtblcpy(s, std_dht00, sizeof(std_dht00));
+	s->ddht[0][1] = dtblcpy(s, std_dht01, sizeof(std_dht01));
+	s->ddht[1][0] = dtblcpy(s, std_dht10, sizeof(std_dht10));
+	s->ddht[1][1] = dtblcpy(s, std_dht11, sizeof(std_dht11));
 	
 	return(SSDV_OK);
 }

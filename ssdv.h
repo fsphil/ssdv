@@ -38,8 +38,9 @@ extern "C" {
 #define SSDV_PKT_SIZE_RSCODES (0x20)
 #define SSDV_PKT_SIZE_PAYLOAD (SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES)
 
-#define HBUFF_LEN (16)
-#define COMPONENTS (3)
+#define TBL_LEN (546) /* Maximum size of the DQT and DHT tables */
+#define HBUFF_LEN (16) /* Extra space for reading marker data */
+//#define COMPONENTS (3)
 
 typedef struct
 {
@@ -91,8 +92,8 @@ typedef struct
 	uint8_t ycparts;    /* Number of Y component parts per MCU          */
 	uint8_t mcupart;    /* 0-3 = Y, 4 = Cb, 5 = Cr                      */
 	uint8_t acpart;     /* 0 - 64; 0 = DC, 1 - 64 = AC                  */
-	int dc[COMPONENTS]; /* DC value for each component                  */
-	int adc[COMPONENTS];/* DC adjusted value for each component         */
+	int dc[3];          /* DC value for each component                  */
+	int adc[3];         /* DC adjusted value for each component         */
 	uint8_t acrle;      /* RLE value for current AC value               */
 	uint8_t accrle;     /* Accumulative RLE value                       */
 	uint16_t dri;       /* Reset interval                               */
@@ -103,8 +104,15 @@ typedef struct
 	uint32_t reset_mcu; /* MCU block to do absolute encoding            */
 	char needbits;      /* Number of bits needed to decode integer      */
 	
-	/* Small buffer for reading SOF0 and SOS header data into */
-	uint8_t hbuff[HBUFF_LEN];
+	/* The input huffman and quantisation tables */
+	uint8_t stbls[TBL_LEN + HBUFF_LEN];
+	uint8_t *sdht[2][2], *sdqt[2];
+	uint16_t stbl_len;
+	
+	/* The same for output */
+	uint8_t dtbls[TBL_LEN];
+	uint8_t *ddht[2][2], *ddqt[2];
+	uint16_t dtbl_len;
 	
 } ssdv_t;
 
