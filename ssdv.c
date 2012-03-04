@@ -514,13 +514,18 @@ static char ssdv_process(ssdv_t *s)
 			}
 			
 			/* Set the packet MCU marker - encoder only */
-			if(s->packet_mcu_id == 0xFFFF)
+			if(s->mode == S_ENCODING && s->packet_mcu_id == 0xFFFF)
 			{
-				if(s->mode == S_ENCODING) s->reset_mcu = s->mcu_id;
+				/* The first MCU of each packet should be byte aligned */
+				ssdv_outbits_sync(s);
+				
+				s->reset_mcu = s->mcu_id;
 				s->packet_mcu_id = s->mcu_id;
-				s->packet_mcu_offset =
-					(SSDV_PKT_SIZE_PAYLOAD - s->out_len) * 8 + s->outlen;
+				s->packet_mcu_offset = SSDV_PKT_SIZE_PAYLOAD - s->out_len;
 			}
+			
+			if(s->mode == S_DECODING && s->mcu_id == s->reset_mcu)
+				s->workbits = s->worklen = 0;
 			
 			/* Test for a reset marker */
 			if(s->dri > 0 && s->mcu_id > 0 && s->mcu_id % s->dri == 0)
@@ -908,19 +913,21 @@ char ssdv_enc_get_packet(ssdv_t *s)
 			if(r == SSDV_BUFFER_FULL || r == SSDV_EOI)
 			{
 				uint16_t mcu_id     = s->packet_mcu_id;
-				uint16_t mcu_offset = s->packet_mcu_offset;
+				uint8_t  mcu_offset = s->packet_mcu_offset;
 				uint16_t i, x;
 				
-				if(mcu_offset != 0xFFFF && mcu_offset >= SSDV_PKT_SIZE_PAYLOAD * 8)
+				if(mcu_offset != 0xFF && mcu_offset >= SSDV_PKT_SIZE_PAYLOAD)
 				{
 					/* The first MCU begins in the next packet, not this one */
-					mcu_id = mcu_offset = 0xFFFF;
-					s->packet_mcu_offset -= SSDV_PKT_SIZE_PAYLOAD * 8;
+					mcu_id = 0xFFFF;
+					mcu_offset = 0xFF;
+					s->packet_mcu_offset -= SSDV_PKT_SIZE_PAYLOAD;
 				}
 				else
 				{
 					/* Clear the MCU data for the next packet */
-					s->packet_mcu_id = s->packet_mcu_offset = 0xFFFF;
+					s->packet_mcu_id = 0xFFFF;
+					s->packet_mcu_offset = 0xFF;
 				}
 				
 				/* A packet is ready, create the headers */
@@ -936,10 +943,9 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				s->out[9]  = s->width >> 4;       /* Width / 16 */
 				s->out[10] = s->height >> 4;      /* Height / 16 */
 				s->out[11] = s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
-				s->out[12] = mcu_offset >> 8;     /* Next MCU offset MSB */
-				s->out[13] = mcu_offset & 0xFF;   /* Next MCU offset LSB */
-				s->out[14] = mcu_id >> 8;         /* MCU ID MSB */
-				s->out[15] = mcu_id & 0xFF;       /* MCU ID LSB */
+				s->out[12] = mcu_offset;          /* Next MCU offset */
+				s->out[13] = mcu_id >> 8;         /* MCU ID MSB */
+				s->out[14] = mcu_id & 0xFF;       /* MCU ID LSB */
 				
 				/* Fill any remaining bytes with noise */
 				if(s->out_len > 0) ssdv_memset_prng(s->outp, s->out_len);
@@ -1124,8 +1130,8 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	
 	/* Read the packet header */
 	packet_id            = (packet[7] << 8) | packet[8];
-	s->packet_mcu_offset = (packet[12] << 8) | packet[13];
-	s->packet_mcu_id     = (packet[14] << 8) | packet[15];
+	s->packet_mcu_offset = packet[12];
+	s->packet_mcu_id     = (packet[13] << 8) | packet[14];
 	
 	if(s->packet_mcu_id != 0xFFFF) s->reset_mcu = s->packet_mcu_id;
 	
@@ -1170,7 +1176,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Gap detected between packets %i and %i\n", s->packet_id - 1, packet_id);
 		
 		/* If this packet has no new MCU, ignore */
-		if(s->packet_mcu_offset == 0xFFFF) return(SSDV_FEED_ME);
+		if(s->packet_mcu_offset == 0xFF) return(SSDV_FEED_ME);
 		
 		/* Fill the gap left by the missing packet */
 		ssdv_fill_gap(s, s->packet_mcu_id);
@@ -1179,18 +1185,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->workbits = s->worklen = 0;
 		
 		/* Skip the bytes of the lost MCU */
-		i = s->packet_mcu_offset >> 3;
-		
-		/* Skip any remaining bits too */
-		if((r = s->packet_mcu_offset & 7))
-		{
-			/* Add the first bits of the new MCU */
-			r = 8 - r;
-			b = packet[SSDV_PKT_SIZE_HEADER + i++];
-			b &= ((1 << r) - 1);
-			s->workbits = b;
-			s->worklen += r;
-		}
+		i = s->packet_mcu_offset;
 		
 		/* Reset the JPEG decoder state */
 		s->state = S_HUFF;
@@ -1278,7 +1273,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	if(p.mcu_id != 0xFFFF)
 	{
 		if(p.mcu_id >= p.mcu_count) return(-1);
-		if(p.mcu_offset >= SSDV_PKT_SIZE_PAYLOAD * 8) return(-1);
+		if(p.mcu_offset >= SSDV_PKT_SIZE_PAYLOAD) return(-1);
 	}
 	
 	/* Test the checksum */
@@ -1302,8 +1297,8 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 	info->width      = packet[9] << 4;
 	info->height     = packet[10] << 4;
 	info->mcu_mode   = packet[11] & 0x03;
-	info->mcu_offset = (packet[12] << 8) | packet[13];
-	info->mcu_id     = (packet[14] << 8) | packet[15];
+	info->mcu_offset = packet[12];
+	info->mcu_id     = (packet[13] << 8) | packet[14];
 	info->mcu_count  = packet[9] * packet[10];
 	if(info->mcu_mode == 1 || info->mcu_mode == 2) info->mcu_count *= 2;
 	else if(info->mcu_mode == 3) info->mcu_count *= 4;
