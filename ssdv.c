@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <math.h>
 #include "ssdv.h"
 #include "rs8.h"
 
@@ -113,9 +112,17 @@ static const uint8_t std_dht11[179] = {
 #define DDQT (s->ddqt[s->component ? 1 : 0][1 + s->acpart])
 
 /* Helpers for converting between DQT tables */
-#define AADJ(i) (SDQT == DDQT ? (i) : round((double) i / DDQT))
-#define UADJ(i) (SDQT == DDQT ? (i) : round((double) i * SDQT))
-#define BADJ(i) (SDQT == DDQT ? (i) : round((double) i * SDQT / DDQT))
+#define AADJ(i) (SDQT == DDQT ? (i) : irdiv(i, DDQT))
+#define UADJ(i) (SDQT == DDQT ? (i) : (i * SDQT))
+#define BADJ(i) (SDQT == DDQT ? (i) : irdiv(i * SDQT, DDQT))
+
+/* Integer-only division with rounding */
+static int irdiv(int i, int div)
+{
+	i = i * 2 / div;
+	if(i & 1) i += (i > 0 ? 1 : -1);
+	return(i / 2);
+}
 
 /*
 static char *strbits(uint32_t value, uint8_t bits)
