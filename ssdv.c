@@ -709,7 +709,7 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		case 3: l = (s->width >> 3) * (s->height >> 3); break;
 		}
 		
-		fprintf(stderr, "MCU blocks: %i\n", l);
+		fprintf(stderr, "MCU blocks: %i\n", (int) l);
 		
 		if(l > 0xFFFF)
 		{
