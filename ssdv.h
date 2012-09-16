@@ -34,9 +34,10 @@ extern "C" {
 /* Packet details */
 #define SSDV_PKT_SIZE         (0x100)
 #define SSDV_PKT_SIZE_HEADER  (0x0F)
-#define SSDV_PKT_SIZE_CRC     (0x02)
+#define SSDV_PKT_SIZE_CRC     (0x04)
 #define SSDV_PKT_SIZE_RSCODES (0x20)
 #define SSDV_PKT_SIZE_PAYLOAD (SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES)
+#define SSDV_PKT_SIZE_CRCDATA (SSDV_PKT_SIZE_HEADER + SSDV_PKT_SIZE_PAYLOAD - 1)
 
 #define TBL_LEN (546) /* Maximum size of the DQT and DHT tables */
 #define HBUFF_LEN (16) /* Extra space for reading marker data */

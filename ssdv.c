@@ -153,21 +153,24 @@ static void *dtblcpy(ssdv_t *s, const void *src, size_t n)
 	return(r);
 }
 
-#ifndef crc_xmodem_update
-uint16_t crc_xmodem_update(uint16_t crc, uint8_t data)
+static uint32_t crc32(void *data, size_t length)
 {
-	int i;
+	uint32_t crc, x;
+	uint8_t i, *d;
 	
-	crc = crc ^ ((uint16_t) data << 8);
-	for(i = 0; i < 8; i++)
+	for(d = data, crc = 0xFFFFFFFF; length; length--)
 	{
-		if(crc & 0x8000) crc = (crc << 1) ^ 0x1021;
-		else crc <<= 1;
+		x = (crc ^ *(d++)) & 0xFF;
+		for(i = 8; i > 0; i--)
+		{
+			if(x & 1) x = (x >> 1) ^ 0xEDB88320;
+			else x >>= 1;
+		}
+		crc = (crc >> 8) ^ x;
 	}
 	
-	return(crc);
+	return(crc ^ 0xFFFFFFFF);
 }
-#endif
 
 static uint32_t encode_callsign(char *callsign)
 {
@@ -920,8 +923,8 @@ char ssdv_enc_get_packet(ssdv_t *s)
 			if(r == SSDV_BUFFER_FULL || r == SSDV_EOI)
 			{
 				uint16_t mcu_id     = s->packet_mcu_id;
-				uint8_t  mcu_offset = s->packet_mcu_offset;
-				uint16_t i, x;
+				uint8_t i, mcu_offset = s->packet_mcu_offset;
+				uint32_t x;
 				
 				if(mcu_offset != 0xFF && mcu_offset >= SSDV_PKT_SIZE_PAYLOAD)
 				{
@@ -958,10 +961,12 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				if(s->out_len > 0) ssdv_memset_prng(s->outp, s->out_len);
 				
 				/* Calculate the CRC codes */
-				for(i = 1, x = 0xFFFF; i < SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES - SSDV_PKT_SIZE_CRC; i++)
-					x = crc_xmodem_update(x, s->out[i]);
+				x = crc32(&s->out[1], SSDV_PKT_SIZE_CRCDATA);
 				
-				s->out[i++] = x >> 8;
+				i = 1 + SSDV_PKT_SIZE_CRCDATA;
+				s->out[i++] = (x >> 24) & 0xFF;
+				s->out[i++] = (x >> 16) & 0xFF;
+				s->out[i++] = (x >> 8) & 0xFF;
 				s->out[i++] = x & 0xFF;
 				
 				/* Generate the RS codes */
@@ -1259,7 +1264,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 {
 	uint8_t pkt[SSDV_PKT_SIZE];
 	ssdv_packet_info_t p;
-	uint16_t x;
+	uint32_t x;
 	int i;
 	
 	/* Testing is destructive, work on a copy */
@@ -1284,10 +1289,12 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	}
 	
 	/* Test the checksum */
-	for(i = 1, x = 0xFFFF; i < SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES - SSDV_PKT_SIZE_CRC; i++)
-		x = crc_xmodem_update(x, pkt[i]);
+	x = crc32(&pkt[1], SSDV_PKT_SIZE_CRCDATA);
 	
-	if(pkt[i++] != (x >> 8)) return(-1);
+	i = 1 + SSDV_PKT_SIZE_CRCDATA;
+	if(pkt[i++] != ((x >> 24) & 0xFF)) return(-1);
+	if(pkt[i++] != ((x >> 16) & 0xFF)) return(-1);
+	if(pkt[i++] != ((x >> 8) & 0xFF)) return(-1);
 	if(pkt[i++] != (x & 0xFF)) return(-1);
 	
 	/* Appears to be a valid packet! Copy it back */
