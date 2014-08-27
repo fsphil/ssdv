@@ -820,6 +820,7 @@ char ssdv_enc_init(ssdv_t *s, char *callsign, uint8_t image_id)
 	s->image_id = image_id;
 	s->callsign = encode_callsign(callsign);
 	s->mode = S_ENCODING;
+	s->fec = 1;
 	
 	/* Prepare the output JPEG tables */
 	s->ddqt[0] = dtblcpy(s, std_dqt0, sizeof(std_dqt0));
@@ -970,7 +971,7 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				s->out[i++] = x & 0xFF;
 				
 				/* Generate the RS codes */
-				encode_rs_8(&s->out[1], &s->out[i], 0);
+				if(s->fec == 1) encode_rs_8(&s->out[1], &s->out[i], 0);
 				
 				s->packet_id++;
 				
@@ -1100,6 +1101,7 @@ char ssdv_dec_init(ssdv_t *s)
 	/* The packet data should contain only scan data, no headers */
 	s->state = S_HUFF;
 	s->mode = S_DECODING;
+	s->fec = 1;
 	
 	/* Prepare the source JPEG tables */
 	s->sdqt[0] = stblcpy(s, std_dqt0, sizeof(std_dqt0));
@@ -1260,7 +1262,7 @@ char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length)
 	return(SSDV_OK);
 }
 
-char ssdv_dec_is_packet(uint8_t *packet, int *errors)
+char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t fec)
 {
 	uint8_t pkt[SSDV_PKT_SIZE];
 	ssdv_packet_info_t p;
@@ -1272,10 +1274,17 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	pkt[0] = 0x55;
 	pkt[1] = 0x66;
 	
-	/* Run the reed-solomon decoder */
-	i = decode_rs_8(&pkt[1], 0, 0, 0);
-	if(i < 0) return(-1); /* Reed-solomon decoder failed */
-	if(errors) *errors = i;
+	if(fec == 0)
+	{
+		if(errors) *errors = 0;
+	}
+	else if(fec == 1)
+	{
+		/* Run the reed-solomon decoder */
+		i = decode_rs_8(&pkt[1], 0, 0, 0);
+		if(i < 0) return(-1); /* Reed-solomon decoder failed */
+		if(errors) *errors = i;
+	}
 	
 	/* Sanity checks */
 	if(pkt[1] != 0x66) return(-1);
@@ -1319,4 +1328,9 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 }
 
 /*****************************************************************************/
+
+void ssdv_set_fec(ssdv_t *s, uint8_t fec)
+{
+	s->fec = fec;
+}
 

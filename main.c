@@ -25,7 +25,7 @@
 
 void exit_usage()
 {
-	fprintf(stderr, "Usage: ssdv [-e|-d] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
+	fprintf(stderr, "Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
 	exit(-1);
 }
 
@@ -35,6 +35,7 @@ int main(int argc, char *argv[])
 	FILE *fin = stdin;
 	FILE *fout = stdout;
 	char encode = -1;
+	char fec = -1;
 	int droptest = 0;
 	char callsign[7];
 	uint8_t image_id = 0;
@@ -46,12 +47,13 @@ int main(int argc, char *argv[])
 	callsign[0] = '\0';
 	
 	opterr = 0;
-	while((c = getopt(argc, argv, "edc:i:t:")) != -1)
+	while((c = getopt(argc, argv, "ednc:i:t:")) != -1)
 	{
 		switch(c)
 		{
 		case 'e': encode = 1; break;
 		case 'd': encode = 0; break;
+		case 'n': fec = 0; break;
 		case 'c':
 			if(strlen(optarg) > 6)
 				fprintf(stderr, "Warning: callsign is longer than 6 characters.\n");
@@ -105,14 +107,16 @@ int main(int argc, char *argv[])
 		jpeg = malloc(jpeg_length);
 		ssdv_dec_set_buffer(&ssdv, jpeg, jpeg_length);
 		
+		ssdv_set_fec(&ssdv, (fec ? 1 : 0));
+		
 		i = 0;
-		while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
+		while(fread(pkt, 1, (fec ? SSDV_PKT_SIZE : SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES), fin) > 0)
 		{
 			/* Drop % of packets */
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, NULL) != 0) continue;
+			if(ssdv_dec_is_packet(pkt, NULL, (fec ? 1 : 0)) != 0) continue;
 			
 			/* Feed it to the decoder */
 			ssdv_dec_feed(&ssdv, pkt);
@@ -130,6 +134,7 @@ int main(int argc, char *argv[])
 	case 1: /* Encode */
 		ssdv_enc_init(&ssdv, callsign, image_id);
 		ssdv_enc_set_buffer(&ssdv, pkt);
+		ssdv_set_fec(&ssdv, (fec ? 1 : 0));
 		
 		i = 0;
 		
@@ -158,7 +163,7 @@ int main(int argc, char *argv[])
 				return(-1);
 			}
 			
-			fwrite(pkt, 1, SSDV_PKT_SIZE, fout);
+			fwrite(pkt, 1, (fec ? SSDV_PKT_SIZE : SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES), fout);
 			i++;
 		}
 		
