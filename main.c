@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 	FILE *fin = stdin;
 	FILE *fout = stdout;
 	char encode = -1;
-	char fec = -1;
+	char type = SSDV_TYPE_NORMAL;
 	int droptest = 0;
 	char callsign[7];
 	uint8_t image_id = 0;
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 		{
 		case 'e': encode = 1; break;
 		case 'd': encode = 0; break;
-		case 'n': fec = 0; break;
+		case 'n': type = SSDV_TYPE_NOFEC; break;
 		case 'c':
 			if(strlen(optarg) > 6)
 				fprintf(stderr, "Warning: callsign is longer than 6 characters.\n");
@@ -101,22 +101,20 @@ int main(int argc, char *argv[])
 	case 0: /* Decode */
 		if(droptest > 0) fprintf(stderr, "*** NOTE: Drop test enabled: %i ***\n", droptest);
 		
-		ssdv_dec_init(&ssdv);
+		ssdv_dec_init(&ssdv, type);
 		
 		jpeg_length = 1024 * 1024 * 4;
 		jpeg = malloc(jpeg_length);
 		ssdv_dec_set_buffer(&ssdv, jpeg, jpeg_length);
 		
-		ssdv_set_fec(&ssdv, (fec ? 1 : 0));
-		
 		i = 0;
-		while(fread(pkt, 1, (fec ? SSDV_PKT_SIZE : SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES), fin) > 0)
+		while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
 		{
 			/* Drop % of packets */
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, NULL, (fec ? 1 : 0)) != 0) continue;
+			if(ssdv_dec_is_packet(pkt, NULL, type) != 0) continue;
 			
 			/* Feed it to the decoder */
 			ssdv_dec_feed(&ssdv, pkt);
@@ -132,9 +130,8 @@ int main(int argc, char *argv[])
 		break;
 	
 	case 1: /* Encode */
-		ssdv_enc_init(&ssdv, callsign, image_id);
+		ssdv_enc_init(&ssdv, type, callsign, image_id);
 		ssdv_enc_set_buffer(&ssdv, pkt);
-		ssdv_set_fec(&ssdv, (fec ? 1 : 0));
 		
 		i = 0;
 		
@@ -163,7 +160,7 @@ int main(int argc, char *argv[])
 				return(-1);
 			}
 			
-			fwrite(pkt, 1, (fec ? SSDV_PKT_SIZE : SSDV_PKT_SIZE - SSDV_PKT_SIZE_RSCODES), fout);
+			fwrite(pkt, 1, SSDV_PKT_SIZE, fout);
 			i++;
 		}
 		

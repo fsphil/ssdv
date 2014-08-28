@@ -36,17 +36,21 @@ extern "C" {
 #define SSDV_PKT_SIZE_HEADER  (0x0F)
 #define SSDV_PKT_SIZE_CRC     (0x04)
 #define SSDV_PKT_SIZE_RSCODES (0x20)
-#define SSDV_PKT_SIZE_PAYLOAD (SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES)
-#define SSDV_PKT_SIZE_CRCDATA (SSDV_PKT_SIZE_HEADER + SSDV_PKT_SIZE_PAYLOAD - 1)
 
 #define TBL_LEN (546) /* Maximum size of the DQT and DHT tables */
 #define HBUFF_LEN (16) /* Extra space for reading marker data */
 //#define COMPONENTS (3)
 
+#define SSDV_TYPE_NORMAL (0)
+#define SSDV_TYPE_NOFEC  (1)
+
 typedef struct
 {
-	/* Flags */
-	uint8_t fec; /* 0 == None, 1 = RS8 */
+	/* Packet type configuration */
+	uint8_t type; /* 0 = Normal mode (224 byte packet + 32 bytes FEC),
+	                 1 = No-FEC mode (256 byte packet) */
+	uint16_t pkt_size_payload;
+	uint16_t pkt_size_crcdata;
 	
 	/* Image information */
 	uint16_t width;
@@ -133,22 +137,19 @@ typedef struct {
 } ssdv_packet_info_t;
 
 /* Encoding */
-extern char ssdv_enc_init(ssdv_t *s, char *callsign, uint8_t image_id);
+extern char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id);
 extern char ssdv_enc_set_buffer(ssdv_t *s, uint8_t *buffer);
 extern char ssdv_enc_get_packet(ssdv_t *s);
 extern char ssdv_enc_feed(ssdv_t *s, uint8_t *buffer, size_t length);
 
 /* Decoding */
-extern char ssdv_dec_init(ssdv_t *s);
+extern char ssdv_dec_init(ssdv_t *s, uint8_t type);
 extern char ssdv_dec_set_buffer(ssdv_t *s, uint8_t *buffer, size_t length);
 extern char ssdv_dec_feed(ssdv_t *s, uint8_t *packet);
 extern char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length);
 
 extern char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t fec);
 extern void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet);
-
-/* Common */
-extern void ssdv_set_fec(ssdv_t *s, uint8_t fec);
 
 #ifdef __cplusplus
 }
