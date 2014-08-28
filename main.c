@@ -25,7 +25,17 @@
 
 void exit_usage()
 {
-	fprintf(stderr, "Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n");
+	fprintf(stderr,
+		"Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n"
+		"\n"
+		"  -e Encode JPEG to SSDV packets.\n"
+		"  -d Decode SSDV packets to JPEG.\n"
+		"\n"
+		"  -n Encode or decode packets with no FEC.\n"
+		"  -t For testing, drops the specified percentage of packets while decoding.\n"
+		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
+		"  -i Set the image ID (0-255).\n"
+		"\n");
 	exit(-1);
 }
 
