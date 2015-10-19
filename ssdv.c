@@ -177,8 +177,8 @@ static uint32_t encode_callsign(char *callsign)
 	uint32_t x;
 	char *c;
 	
-	/* Point c at the end of the callsign */
-	for(c = callsign; *c; c++);
+	/* Point c at the end of the callsign, maximum of 6 characters */
+	for(x = 0, c = callsign; x < SSDV_MAX_CALLSIGN && *c; x++, c++);
 	
 	/* Encode it backwards */
 	x = 0;
@@ -960,21 +960,23 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				}
 				
 				/* A packet is ready, create the headers */
-				s->out[0]  = 0x55;                /* Sync */
-				s->out[1]  = 0x66 + s->type;      /* Type */
-				s->out[2]  = s->callsign >> 24;
-				s->out[3]  = s->callsign >> 16;
-				s->out[4]  = s->callsign >> 8;
-				s->out[5]  = s->callsign;
-				s->out[6]  = s->image_id;         /* Image ID */
-				s->out[7]  = s->packet_id >> 8;   /* Packet ID MSB */
-				s->out[8]  = s->packet_id & 0xFF; /* Packet ID LSB */
-				s->out[9]  = s->width >> 4;       /* Width / 16 */
-				s->out[10] = s->height >> 4;      /* Height / 16 */
-				s->out[11] = s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
-				s->out[12] = mcu_offset;          /* Next MCU offset */
-				s->out[13] = mcu_id >> 8;         /* MCU ID MSB */
-				s->out[14] = mcu_id & 0xFF;       /* MCU ID LSB */
+				s->out[0]   = 0x55;                /* Sync */
+				s->out[1]   = 0x66 + s->type;      /* Type */
+				s->out[2]   = s->callsign >> 24;
+				s->out[3]   = s->callsign >> 16;
+				s->out[4]   = s->callsign >> 8;
+				s->out[5]   = s->callsign;
+				s->out[6]   = s->image_id;         /* Image ID */
+				s->out[7]   = s->packet_id >> 8;   /* Packet ID MSB */
+				s->out[8]   = s->packet_id & 0xFF; /* Packet ID LSB */
+				s->out[9]   = s->width >> 4;       /* Width / 16 */
+				s->out[10]  = s->height >> 4;      /* Height / 16 */
+				s->out[11]  = 0x00;
+				s->out[11] |= (r == SSDV_EOI ? 1 : 0) << 2; /* EOI flag (1 bit) */
+				s->out[11] |= s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
+				s->out[12]  = mcu_offset;          /* Next MCU offset */
+				s->out[13]  = mcu_id >> 8;         /* MCU ID MSB */
+				s->out[14]  = mcu_id & 0xFF;       /* MCU ID LSB */
 				
 				/* Fill any remaining bytes with noise */
 				if(s->out_len > 0) ssdv_memset_prng(s->outp, s->out_len);
@@ -1173,7 +1175,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	if(s->packet_id == 0)
 	{
 		const char *factor;
-		char callsign[7];
+		char callsign[SSDV_MAX_CALLSIGN + 1];
 		
 		/* Read the fixed headers from the packet */
 		s->callsign  = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
@@ -1349,11 +1351,13 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t type)
 
 void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 {
-	info->callsign  = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
+	info->callsign   = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
+	decode_callsign(info->callsign_s, info->callsign);
 	info->image_id   = packet[6];
 	info->packet_id  = (packet[7] << 8) | packet[8];
 	info->width      = packet[9] << 4;
 	info->height     = packet[10] << 4;
+	info->eoi        = (packet[11] >> 2) & 1;
 	info->mcu_mode   = packet[11] & 0x03;
 	info->mcu_offset = packet[12];
 	info->mcu_id     = (packet[13] << 8) | packet[14];

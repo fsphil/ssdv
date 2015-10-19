@@ -39,7 +39,8 @@ extern "C" {
 
 #define TBL_LEN (546) /* Maximum size of the DQT and DHT tables */
 #define HBUFF_LEN (16) /* Extra space for reading marker data */
-//#define COMPONENTS (3)
+
+#define SSDV_MAX_CALLSIGN (6) /* Maximum number of characters in a callsign */
 
 #define SSDV_TYPE_NORMAL (0)
 #define SSDV_TYPE_NOFEC  (1)
@@ -126,10 +127,12 @@ typedef struct
 
 typedef struct {
 	uint32_t callsign;
+	char     callsign_s[SSDV_MAX_CALLSIGN + 1];
 	uint8_t  image_id;
 	uint16_t packet_id;
 	uint16_t width;
 	uint16_t height;
+	uint8_t  eoi;
 	uint16_t mcu_mode;
 	uint8_t  mcu_offset;
 	uint16_t mcu_id;

@@ -47,6 +47,8 @@ int main(int argc, char *argv[])
 	char encode = -1;
 	char type = SSDV_TYPE_NORMAL;
 	int droptest = 0;
+	int verbose = 0;
+	int errors;
 	char callsign[7];
 	uint8_t image_id = 0;
 	ssdv_t ssdv;
@@ -57,7 +59,7 @@ int main(int argc, char *argv[])
 	callsign[0] = '\0';
 	
 	opterr = 0;
-	while((c = getopt(argc, argv, "ednc:i:t:")) != -1)
+	while((c = getopt(argc, argv, "ednc:i:t:v")) != -1)
 	{
 		switch(c)
 		{
@@ -71,6 +73,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'i': image_id = atoi(optarg); break;
 		case 't': droptest = atoi(optarg); break;
+		case 'v': verbose = 1; break;
 		case '?': exit_usage();
 		}
 	}
@@ -124,7 +127,28 @@ int main(int argc, char *argv[])
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, NULL, type) != 0) continue;
+			if(ssdv_dec_is_packet(pkt, &errors, type) != 0) continue;
+			
+			if(verbose)
+			{
+				ssdv_packet_info_t p;
+				
+				ssdv_dec_header(&p, pkt);
+				fprintf(stderr, "Decoded image packet. Callsign: %s, Image ID: %d, Resolution: %dx%d, Packet ID: %d (%d errors corrected)\n"
+				                ">> EOI: %d, MCU Mode: %d, MCU Offset: %d, MCU ID: %d/%d\n",
+					p.callsign_s,
+					p.image_id,
+					p.width,
+					p.height,
+					p.packet_id,
+					errors,
+					p.eoi,
+					p.mcu_mode,
+					p.mcu_offset,
+					p.mcu_id,
+					p.mcu_count
+				);
+			}
 			
 			/* Feed it to the decoder */
 			ssdv_dec_feed(&ssdv, pkt);
