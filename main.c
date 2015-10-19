@@ -35,6 +35,7 @@ void exit_usage()
 		"  -t For testing, drops the specified percentage of packets while decoding.\n"
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
 		"  -i Set the image ID (0-255).\n"
+		"  -v Print data for each packet decoded.\n"
 		"\n");
 	exit(-1);
 }
