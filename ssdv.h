@@ -126,6 +126,7 @@ typedef struct
 } ssdv_t;
 
 typedef struct {
+	uint8_t  type;
 	uint32_t callsign;
 	char     callsign_s[SSDV_MAX_CALLSIGN + 1];
 	uint8_t  image_id;
@@ -146,12 +147,12 @@ extern char ssdv_enc_get_packet(ssdv_t *s);
 extern char ssdv_enc_feed(ssdv_t *s, uint8_t *buffer, size_t length);
 
 /* Decoding */
-extern char ssdv_dec_init(ssdv_t *s, uint8_t type);
+extern char ssdv_dec_init(ssdv_t *s);
 extern char ssdv_dec_set_buffer(ssdv_t *s, uint8_t *buffer, size_t length);
 extern char ssdv_dec_feed(ssdv_t *s, uint8_t *packet);
 extern char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length);
 
-extern char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t fec);
+extern char ssdv_dec_is_packet(uint8_t *packet, int *errors);
 extern void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet);
 
 #ifdef __cplusplus

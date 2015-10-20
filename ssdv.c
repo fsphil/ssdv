@@ -1115,15 +1115,13 @@ static void ssdv_fill_gap(ssdv_t *s, uint16_t next_mcu)
 	}
 }
 
-char ssdv_dec_init(ssdv_t *s, uint8_t type)
+char ssdv_dec_init(ssdv_t *s)
 {
 	memset(s, 0, sizeof(ssdv_t));
 	
 	/* The packet data should contain only scan data, no headers */
 	s->state = S_HUFF;
 	s->mode = S_DECODING;
-	s->type = type;
-	ssdv_set_packet_conf(s);
 	
 	/* Prepare the source JPEG tables */
 	s->sdqt[0] = stblcpy(s, std_dqt0, sizeof(std_dqt0));
@@ -1178,12 +1176,16 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		char callsign[SSDV_MAX_CALLSIGN + 1];
 		
 		/* Read the fixed headers from the packet */
+		s->type      = packet[1] - 0x66;
 		s->callsign  = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
 		s->image_id  = packet[6];
 		s->width     = packet[9] << 4;
 		s->height    = packet[10] << 4;
 		s->mcu_count = packet[9] * packet[10];
 		s->mcu_mode  = packet[11] & 0x03;
+		
+		/* Configure the payload size and CRC position */
+		ssdv_set_packet_conf(s);
 		
 		switch(s->mcu_mode)
 		{
@@ -1284,9 +1286,10 @@ char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length)
 	return(SSDV_OK);
 }
 
-char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t type)
+char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 {
 	uint8_t pkt[SSDV_PKT_SIZE];
+	uint8_t type;
 	uint16_t pkt_size_payload;
 	uint16_t pkt_size_crcdata;
 	ssdv_packet_info_t p;
@@ -1296,37 +1299,35 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t type)
 	/* Testing is destructive, work on a copy */
 	memcpy(pkt, packet, SSDV_PKT_SIZE);
 	pkt[0] = 0x55;
-	pkt[1] = 0x66 + type;
 	
-	switch(type)
+	if(pkt[1] == 0x66 + SSDV_TYPE_NOFEC)
 	{
-	case SSDV_TYPE_NORMAL:
-		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
-		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
+		type = SSDV_TYPE_NOFEC;
 		
-		/* Run the reed-solomon decoder */
-		i = decode_rs_8(&pkt[1], 0, 0, 0);
-		if(errors) *errors = 0;
-		
-		break;
-	
-	case SSDV_TYPE_NOFEC:
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
 		if(errors) *errors = 0;
+	}
+	else
+	{
+		type = SSDV_TYPE_NORMAL;
 		
-		break;
-	
-	default:
-		fprintf(stderr, "Invalid packet type\n");
-		return(-1);
+		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
+		
+		/* Run the reed-solomon decoder */
+		pkt[1] = 0x66 + SSDV_TYPE_NORMAL;
+		i = decode_rs_8(&pkt[1], 0, 0, 0);
+		
+		if(i < 0) return(-1); /* Reed-solomon decoder failed */
+		if(errors) *errors = i;
 	}
 	
 	/* Sanity checks */
-	if(pkt[1] != 0x66 + type) return(-1);
-	
 	ssdv_dec_header(&p, pkt);
+	
+	if(p.type != type) return(-1);
 	if(p.width == 0 || p.height == 0) return(-1);
 	if(p.mcu_id != 0xFFFF)
 	{
@@ -1351,6 +1352,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors, uint8_t type)
 
 void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 {
+	info->type       = packet[1] - 0x66;
 	info->callsign   = (packet[2] << 24) | (packet[3] << 16) | (packet[4] << 8) | packet[5];
 	decode_callsign(info->callsign_s, info->callsign);
 	info->image_id   = packet[6];

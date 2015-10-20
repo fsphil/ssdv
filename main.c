@@ -31,7 +31,7 @@ void exit_usage()
 		"  -e Encode JPEG to SSDV packets.\n"
 		"  -d Decode SSDV packets to JPEG.\n"
 		"\n"
-		"  -n Encode or decode packets with no FEC.\n"
+		"  -n Encode packets with no FEC.\n"
 		"  -t For testing, drops the specified percentage of packets while decoding.\n"
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
 		"  -i Set the image ID (0-255).\n"
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 	case 0: /* Decode */
 		if(droptest > 0) fprintf(stderr, "*** NOTE: Drop test enabled: %i ***\n", droptest);
 		
-		ssdv_dec_init(&ssdv, type);
+		ssdv_dec_init(&ssdv);
 		
 		jpeg_length = 1024 * 1024 * 4;
 		jpeg = malloc(jpeg_length);
@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, &errors, type) != 0) continue;
+			if(ssdv_dec_is_packet(pkt, &errors) != 0) continue;
 			
 			if(verbose)
 			{
@@ -136,13 +136,14 @@ int main(int argc, char *argv[])
 				
 				ssdv_dec_header(&p, pkt);
 				fprintf(stderr, "Decoded image packet. Callsign: %s, Image ID: %d, Resolution: %dx%d, Packet ID: %d (%d errors corrected)\n"
-				                ">> EOI: %d, MCU Mode: %d, MCU Offset: %d, MCU ID: %d/%d\n",
+				                ">> Type: %d, EOI: %d, MCU Mode: %d, MCU Offset: %d, MCU ID: %d/%d\n",
 					p.callsign_s,
 					p.image_id,
 					p.width,
 					p.height,
 					p.packet_id,
 					errors,
+					p.type,
 					p.eoi,
 					p.mcu_mode,
 					p.mcu_offset,
