@@ -1,7 +1,7 @@
 
 /* SSDV - Slow Scan Digital Video                                        */
 /*=======================================================================*/
-/* Copyright 2011-2012 Philip Heron <phil@sanslogic.co.uk                */
+/* Copyright 2011-2016 Philip Heron <phil@sanslogic.co.uk>               */
 /*                                                                       */
 /* This program is free software: you can redistribute it and/or modify  */
 /* it under the terms of the GNU General Public License as published by  */
