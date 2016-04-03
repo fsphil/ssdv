@@ -42,8 +42,9 @@ extern "C" {
 
 #define SSDV_MAX_CALLSIGN (6) /* Maximum number of characters in a callsign */
 
-#define SSDV_TYPE_NORMAL (0)
-#define SSDV_TYPE_NOFEC  (1)
+#define SSDV_TYPE_INVALID (0xFF)
+#define SSDV_TYPE_NORMAL  (0x00)
+#define SSDV_TYPE_NOFEC   (0x01)
 
 typedef struct
 {

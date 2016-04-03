@@ -1300,19 +1300,50 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	memcpy(pkt, packet, SSDV_PKT_SIZE);
 	pkt[0] = 0x55;
 	
+	type = SSDV_TYPE_INVALID;
+	
 	if(pkt[1] == 0x66 + SSDV_TYPE_NOFEC)
 	{
-		type = SSDV_TYPE_NOFEC;
-		
+		/* Test for a valid NOFEC packet */
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
+		/* No FEC scan */
 		if(errors) *errors = 0;
-	}
-	else
-	{
-		type = SSDV_TYPE_NORMAL;
 		
+		/* Test the checksum */
+		x = crc32(&pkt[1], pkt_size_crcdata);
+		
+		i = 1 + pkt_size_crcdata;
+		if(x == (pkt[i + 3] | (pkt[i + 2] << 8) | (pkt[i + 1] << 16) | (pkt[i] << 24)))
+		{
+			/* Valid, set the type and continue */
+			type = SSDV_TYPE_NOFEC;
+		}
+	}
+	else if(pkt[1] == 0x66 + SSDV_TYPE_NORMAL)
+	{
+		/* Test for a valid NORMAL packet */
+		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
+		
+		/* No FEC scan */
+		if(errors) *errors = 0;
+		
+		/* Test the checksum */
+		x = crc32(&pkt[1], pkt_size_crcdata);
+		
+		i = 1 + pkt_size_crcdata;
+		if(x == (pkt[i + 3] | (pkt[i + 2] << 8) | (pkt[i + 1] << 16) | (pkt[i] << 24)))
+		{
+			/* Valid, set the type and continue */
+			type = SSDV_TYPE_NORMAL;
+		}
+	}
+	
+	if(type == SSDV_TYPE_INVALID)
+	{
+		/* Test for a valid NORMAL packet with correctable errors */
 		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
@@ -1322,6 +1353,22 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 		
 		if(i < 0) return(-1); /* Reed-solomon decoder failed */
 		if(errors) *errors = i;
+		
+		/* Test the checksum */
+		x = crc32(&pkt[1], pkt_size_crcdata);
+		
+		i = 1 + pkt_size_crcdata;
+		if(x == (pkt[i + 3] | (pkt[i + 2] << 8) | (pkt[i + 1] << 16) | (pkt[i] << 24)))
+		{
+			/* Valid, set the type and continue */
+			type = SSDV_TYPE_NORMAL;
+		}
+	}
+	
+	if(type == SSDV_TYPE_INVALID)
+	{
+		/* All attempts to read the packet have failed */
+		return(-1);
 	}
 	
 	/* Sanity checks */
@@ -1334,15 +1381,6 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 		if(p.mcu_id >= p.mcu_count) return(-1);
 		if(p.mcu_offset >= pkt_size_payload) return(-1);
 	}
-	
-	/* Test the checksum */
-	x = crc32(&pkt[1], pkt_size_crcdata);
-	
-	i = 1 + pkt_size_crcdata;
-	if(pkt[i++] != ((x >> 24) & 0xFF)) return(-1);
-	if(pkt[i++] != ((x >> 16) & 0xFF)) return(-1);
-	if(pkt[i++] != ((x >> 8) & 0xFF)) return(-1);
-	if(pkt[i++] != (x & 0xFF)) return(-1);
 	
 	/* Appears to be a valid packet! Copy it back */
 	memcpy(packet, pkt, SSDV_PKT_SIZE);
