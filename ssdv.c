@@ -45,6 +45,11 @@ static const uint8_t const sos[10] = {
 0x03,0x01,0x00,0x02,0x11,0x03,0x11,0x00,0x3F,0x00,
 };
 
+/* Quantisation table scaling factors for each quality level 0-7 */
+static const uint16_t const dqt_scales[8] = {
+5000, 357, 172, 116, 100, 58, 28, 0
+};
+
 /* Quantisation tables */
 static const uint8_t const std_dqt0[65] = {
 0x00,0x10,0x0C,0x0C,0x0E,0x0C,0x0A,0x10,0x0E,0x0E,0x0E,0x12,0x12,0x10,0x14,0x18,
@@ -134,6 +139,61 @@ static char *strbits(uint32_t value, uint8_t bits)
 	return(s);
 }
 */
+
+static void load_standard_dqt(uint8_t *dst, const uint8_t *table, uint8_t quality)
+{
+	int i;
+	uint16_t scale_factor;
+	uint32_t temp;
+	
+	/* Copy the table ID */
+	*dst++ = *table++;
+	
+	/* Load the scaling factor */
+	if(quality > 7) quality = 7;
+	scale_factor = dqt_scales[quality];
+	
+	/* Copy the remaining 64 coefficients, while applying the scaling factor */
+	for(i = 0; i < 64; i++)
+	{
+		temp = *table++;
+		temp = (temp * scale_factor + 50) / 100;
+		
+		/* limit the values to the valid range */
+		if(temp == 0) temp = 1;
+		if(temp > 255) temp = 255;
+		
+		*dst++ = temp;
+	}
+}
+
+static void *sload_standard_dqt(ssdv_t *s, const uint8_t *table, uint8_t quality)
+{
+	uint8_t *r;
+	
+	/* DQT is 65 bytes long, ensure there is space */
+	if(s->stbl_len + 65 > TBL_LEN + HBUFF_LEN) return(NULL);
+	
+	r = &s->stbls[s->stbl_len];
+	load_standard_dqt(r, table, quality);
+	s->stbl_len += 65;
+	
+	return(r);
+}
+
+static void *dload_standard_dqt(ssdv_t *s, const uint8_t *table, uint8_t quality)
+{
+	uint8_t *r;
+	
+	/* DQT is 65 bytes long, ensure there is space */
+	if(s->dtbl_len + 65 > TBL_LEN + HBUFF_LEN) return(NULL);
+	
+	r = &s->dtbls[s->dtbl_len];
+	load_standard_dqt(r, table, quality);
+	s->dtbl_len += 65;
+	
+	return(r);
+}
 
 static void *stblcpy(ssdv_t *s, const void *src, size_t n)
 {
@@ -831,18 +891,19 @@ static char ssdv_have_marker_data(ssdv_t *s)
 	return(SSDV_OK);
 }
 
-char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id)
+char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality)
 {
 	memset(s, 0, sizeof(ssdv_t));
 	s->image_id = image_id;
 	s->callsign = encode_callsign(callsign);
 	s->mode = S_ENCODING;
 	s->type = type;
+	s->quality = 4 + quality; /* Quality levels are -4 to 3, adjust to 0-7 */
 	ssdv_set_packet_conf(s);
 	
 	/* Prepare the output JPEG tables */
-	s->ddqt[0] = dtblcpy(s, std_dqt0, sizeof(std_dqt0));
-	s->ddqt[1] = dtblcpy(s, std_dqt1, sizeof(std_dqt1));
+	s->ddqt[0] = dload_standard_dqt(s, std_dqt0, s->quality);
+	s->ddqt[1] = dload_standard_dqt(s, std_dqt1, s->quality);
 	s->ddht[0][0] = dtblcpy(s, std_dht00, sizeof(std_dht00));
 	s->ddht[0][1] = dtblcpy(s, std_dht01, sizeof(std_dht01));
 	s->ddht[1][0] = dtblcpy(s, std_dht10, sizeof(std_dht10));
@@ -972,6 +1033,7 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				s->out[9]   = s->width >> 4;       /* Width / 16 */
 				s->out[10]  = s->height >> 4;      /* Height / 16 */
 				s->out[11]  = 0x00;
+				s->out[11] |= s->quality << 3;     /* Quality level */
 				s->out[11] |= (r == SSDV_EOI ? 1 : 0) << 2; /* EOI flag (1 bit) */
 				s->out[11] |= s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
 				s->out[12]  = mcu_offset;          /* Next MCU offset */
@@ -1044,8 +1106,8 @@ static void ssdv_out_headers(ssdv_t *s)
 	
 	ssdv_write_marker(s, J_SOI,    0, 0);
 	ssdv_write_marker(s, J_APP0,  14, app0);
-	ssdv_write_marker(s, J_DQT,   65, std_dqt0);  /* DQT Luminance       */
-	ssdv_write_marker(s, J_DQT,   65, std_dqt1);  /* DQT Chrominance     */
+	ssdv_write_marker(s, J_DQT,   65, s->ddqt[0]);  /* DQT Luminance       */
+	ssdv_write_marker(s, J_DQT,   65, s->ddqt[1]);  /* DQT Chrominance     */
 	
 	/* Build SOF0 header */
 	b[0]  = 8; /* Precision */
@@ -1124,16 +1186,12 @@ char ssdv_dec_init(ssdv_t *s)
 	s->mode = S_DECODING;
 	
 	/* Prepare the source JPEG tables */
-	s->sdqt[0] = stblcpy(s, std_dqt0, sizeof(std_dqt0));
-	s->sdqt[1] = stblcpy(s, std_dqt1, sizeof(std_dqt1));
 	s->sdht[0][0] = stblcpy(s, std_dht00, sizeof(std_dht00));
 	s->sdht[0][1] = stblcpy(s, std_dht01, sizeof(std_dht01));
 	s->sdht[1][0] = stblcpy(s, std_dht10, sizeof(std_dht10));
 	s->sdht[1][1] = stblcpy(s, std_dht11, sizeof(std_dht11));
 	
 	/* Prepare the output JPEG tables */
-	s->ddqt[0] = dtblcpy(s, std_dqt0, sizeof(std_dqt0));
-	s->ddqt[1] = dtblcpy(s, std_dqt1, sizeof(std_dqt1));
 	s->ddht[0][0] = dtblcpy(s, std_dht00, sizeof(std_dht00));
 	s->ddht[0][1] = dtblcpy(s, std_dht01, sizeof(std_dht01));
 	s->ddht[1][0] = dtblcpy(s, std_dht10, sizeof(std_dht10));
@@ -1182,12 +1240,19 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->width     = packet[9] << 4;
 		s->height    = packet[10] << 4;
 		s->mcu_count = packet[9] * packet[10];
+		s->quality   = (packet[11] >> 3) & 7;
 		s->mcu_mode  = packet[11] & 0x03;
 		
 		/* Configure the payload size and CRC position */
 		ssdv_set_packet_conf(s);
 		
-		switch(s->mcu_mode)
+		/* Generate the DQT tables */
+		s->sdqt[0] = sload_standard_dqt(s, std_dqt0, s->quality);
+		s->sdqt[1] = sload_standard_dqt(s, std_dqt1, s->quality);
+		s->ddqt[0] = dload_standard_dqt(s, std_dqt0, s->quality);
+		s->ddqt[1] = dload_standard_dqt(s, std_dqt1, s->quality);
+		
+		switch(s->mcu_mode & 3)
 		{
 		case 0: factor = "2x2"; s->ycparts = 4; break;
 		case 1: factor = "1x2"; s->ycparts = 2; s->mcu_count *= 2; break;
@@ -1201,6 +1266,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
 		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
 		fprintf(stderr, "Sampling factor: %s\n", factor);
+		fprintf(stderr, "Quality level: %d\n", s->quality - 4);
 		
 		/* Output JPEG headers and enable byte stuffing */
 		ssdv_out_headers(s);
@@ -1398,6 +1464,7 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 	info->width      = packet[9] << 4;
 	info->height     = packet[10] << 4;
 	info->eoi        = (packet[11] >> 2) & 1;
+	info->quality    = (packet[11] >> 3) & 7;
 	info->mcu_mode   = packet[11] & 0x03;
 	info->mcu_offset = packet[12];
 	info->mcu_id     = (packet[13] << 8) | packet[14];

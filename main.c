@@ -26,7 +26,7 @@
 void exit_usage()
 {
 	fprintf(stderr,
-		"Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [<in file>] [<out file>]\n"
+		"Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [-q <level>] [<in file>] [<out file>]\n"
 		"\n"
 		"  -e Encode JPEG to SSDV packets.\n"
 		"  -d Decode SSDV packets to JPEG.\n"
@@ -35,6 +35,7 @@ void exit_usage()
 		"  -t For testing, drops the specified percentage of packets while decoding.\n"
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
 		"  -i Set the image ID (0-255).\n"
+		"  -q Set the JPEG quality level (-4 to 3, defaults to 0).\n"
 		"  -v Print data for each packet decoded.\n"
 		"\n");
 	exit(-1);
@@ -52,6 +53,7 @@ int main(int argc, char *argv[])
 	int errors;
 	char callsign[7];
 	uint8_t image_id = 0;
+	int8_t quality;
 	ssdv_t ssdv;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;
@@ -60,7 +62,7 @@ int main(int argc, char *argv[])
 	callsign[0] = '\0';
 	
 	opterr = 0;
-	while((c = getopt(argc, argv, "ednc:i:t:v")) != -1)
+	while((c = getopt(argc, argv, "ednc:i:q:t:v")) != -1)
 	{
 		switch(c)
 		{
@@ -73,6 +75,7 @@ int main(int argc, char *argv[])
 			strncpy(callsign, optarg, 7);
 			break;
 		case 'i': image_id = atoi(optarg); break;
+		case 'q': quality = atoi(optarg); break;
 		case 't': droptest = atoi(optarg); break;
 		case 'v': verbose = 1; break;
 		case '?': exit_usage();
@@ -166,7 +169,7 @@ int main(int argc, char *argv[])
 		break;
 	
 	case 1: /* Encode */
-		ssdv_enc_init(&ssdv, type, callsign, image_id);
+		ssdv_enc_init(&ssdv, type, callsign, image_id, quality);
 		ssdv_enc_set_buffer(&ssdv, pkt);
 		
 		i = 0;
