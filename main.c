@@ -35,7 +35,7 @@ void exit_usage()
 		"  -t For testing, drops the specified percentage of packets while decoding.\n"
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
 		"  -i Set the image ID (0-255).\n"
-		"  -q Set the JPEG quality level (-4 to 3, defaults to 0).\n"
+		"  -q Set the JPEG quality level (0 to 7, defaults to 4).\n"
 		"  -v Print data for each packet decoded.\n"
 		"\n");
 	exit(-1);
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 	int errors;
 	char callsign[7];
 	uint8_t image_id = 0;
-	int8_t quality;
+	int8_t quality = 4;
 	ssdv_t ssdv;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;

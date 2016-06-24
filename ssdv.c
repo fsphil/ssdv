@@ -893,12 +893,16 @@ static char ssdv_have_marker_data(ssdv_t *s)
 
 char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality)
 {
+	/* Limit the quality level */
+	if(quality < 0) quality = 0;
+	if(quality > 7) quality = 7;
+	
 	memset(s, 0, sizeof(ssdv_t));
 	s->image_id = image_id;
 	s->callsign = encode_callsign(callsign);
 	s->mode = S_ENCODING;
 	s->type = type;
-	s->quality = 4 + quality; /* Quality levels are -4 to 3, adjust to 0-7 */
+	s->quality = quality;
 	ssdv_set_packet_conf(s);
 	
 	/* Prepare the output JPEG tables */
@@ -1033,7 +1037,7 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				s->out[9]   = s->width >> 4;       /* Width / 16 */
 				s->out[10]  = s->height >> 4;      /* Height / 16 */
 				s->out[11]  = 0x00;
-				s->out[11] |= s->quality << 3;     /* Quality level */
+				s->out[11] |= ((s->quality - 4) & 7) << 3;  /* Quality level */
 				s->out[11] |= (r == SSDV_EOI ? 1 : 0) << 2; /* EOI flag (1 bit) */
 				s->out[11] |= s->mcu_mode & 0x03;  /* MCU mode (2 bits) */
 				s->out[12]  = mcu_offset;          /* Next MCU offset */
@@ -1240,7 +1244,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->width     = packet[9] << 4;
 		s->height    = packet[10] << 4;
 		s->mcu_count = packet[9] * packet[10];
-		s->quality   = (packet[11] >> 3) & 7;
+		s->quality   = ((((packet[11] >> 3) & 7) ^ 4) - 4) + 4;
 		s->mcu_mode  = packet[11] & 0x03;
 		
 		/* Configure the payload size and CRC position */
@@ -1266,7 +1270,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Resolution: %ix%i\n", s->width, s->height);
 		fprintf(stderr, "MCU blocks: %i\n", s->mcu_count);
 		fprintf(stderr, "Sampling factor: %s\n", factor);
-		fprintf(stderr, "Quality level: %d\n", s->quality - 4);
+		fprintf(stderr, "Quality level: %d\n", s->quality);
 		
 		/* Output JPEG headers and enable byte stuffing */
 		ssdv_out_headers(s);
