@@ -1244,7 +1244,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->width     = packet[9] << 4;
 		s->height    = packet[10] << 4;
 		s->mcu_count = packet[9] * packet[10];
-		s->quality   = ((((packet[11] >> 3) & 7) ^ 4) - 4) + 4;
+		s->quality   = ((packet[11] >> 3) & 7) ^ 4;
 		s->mcu_mode  = packet[11] & 0x03;
 		
 		/* Configure the payload size and CRC position */
@@ -1468,7 +1468,7 @@ void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet)
 	info->width      = packet[9] << 4;
 	info->height     = packet[10] << 4;
 	info->eoi        = (packet[11] >> 2) & 1;
-	info->quality    = (packet[11] >> 3) & 7;
+	info->quality    = ((packet[11] >> 3) & 7) ^ 4;
 	info->mcu_mode   = packet[11] & 0x03;
 	info->mcu_offset = packet[12];
 	info->mcu_id     = (packet[13] << 8) | packet[14];
