@@ -25,7 +25,7 @@ LIMITATIONS
 
 Only JPEG files are supported, with the following limitations:
 
- - YUV/YCbCr colour format
+ - Greyscale or YUV/YCbCr colour formats
  - Width and height must be a multiple of 16 (up to a resolution of 4080 x 4080)
  - Baseline DCT only
  - The total number of MCU blocks must not exceed 65535
@@ -38,5 +38,4 @@ TODO
 
 * Allow the decoder to handle multiple images in the input stream.
 * Experiment with adaptive or multiple huffman tables.
-* Quality setting (4 bit / 16 quality levels).
 

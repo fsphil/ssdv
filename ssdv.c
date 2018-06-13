@@ -569,8 +569,22 @@ static char ssdv_process(ssdv_t *s)
 	
 	if(s->acpart >= 64)
 	{
+		s->mcupart++;
+		
+		if(s->greyscale && s->mcupart == s->ycparts)
+		{
+			/* For greyscale input images, pad the 2x1 MCUs with empty colour blocks */
+			for(; s->mcupart < s->ycparts + 2; s->mcupart++)
+			{
+				if(s->mcupart < s->ycparts) s->component = 0;
+				else s->component = s->mcupart - s->ycparts + 1;
+				s->acpart = 0; ssdv_out_jpeg_int(s, 0, 0); /* DC */
+				s->acpart = 1; ssdv_out_jpeg_int(s, 0, 0); /* AC */
+			}
+		}
+		
 		/* Reached the end of this MCU part */
-		if(++s->mcupart == s->ycparts + 2)
+		if(s->mcupart == s->ycparts + 2)
 		{
 			s->mcupart = 0;
 			s->mcu_id++;
@@ -722,10 +736,10 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			return(SSDV_ERROR);
 		}
 		
-		/* The image must have 3 components (Y'Cb'Cr) */
-		if(d[5] != 3)
+		/* The image must have 1 or 3 components (Y'Cb'Cr) */
+		if(d[5] != 1 && d[5] != 3)
 		{
-			fprintf(stderr, "Error: The image must have 3 components\n");
+			fprintf(stderr, "Error: The image must have 1 or 3 components\n");
 			return(SSDV_ERROR);
 		}
 		
@@ -745,7 +759,7 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		
 		/* TODO: Read in the quantisation table ID for each component */
 		// 01 22 00 02 11 01 03 11 01
-		for(i = 0; i < 3; i++)
+		for(i = 0; i < d[5]; i++)
 		{
 			uint8_t *dq = &d[i * 3 + 6];
 			if(dq[0] != i + 1)
@@ -777,6 +791,14 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			}
 		}
 		
+		if(d[5] == 1)
+		{
+			/* Greyscale images are converted to 2x1 colour images */
+			s->greyscale = 1;
+			s->mcu_mode = 2;
+			s->ycparts = 2;
+		}
+		
 		/* Calculate number of MCU blocks in this image */
 		switch(s->mcu_mode)
 		{
@@ -801,14 +823,14 @@ static char ssdv_have_marker_data(ssdv_t *s)
 	case J_SOS:
 		fprintf(stderr, "Components: %i\n", d[0]);
 		
-		/* The image must have 3 components (Y'Cb'Cr) */
-		if(d[0] != 3)
+		/* The image must have 1 or 3 components (Y'Cb'Cr) */
+		if(d[0] != 1 && d[0] != 3)
 		{
-			fprintf(stderr, "Error: The image must have 3 components\n");
+			fprintf(stderr, "Error: The image must have 1 or 3 components\n");
 			return(SSDV_ERROR);
 		}
 		
-		for(i = 0; i < 3; i++)
+		for(i = 0; i < d[0]; i++)
 		{
 			uint8_t *dh = &d[i * 2 + 1];
 			if(dh[0] != i + 1)
@@ -824,14 +846,14 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		/* 00 3F 00 */
 		
 		/* Verify all of the DQT and DHT tables where loaded */
-		if(!s->sdqt[0] || !s->sdqt[1])
+		if(!s->sdqt[0] || (d[0] > 1 && !s->sdqt[1]))
 		{
 			fprintf(stderr, "Error: The image is missing one or more DQT tables\n");
 			return(SSDV_ERROR);
 		}
 		
-		if(!s->sdht[0][0] || !s->sdht[0][1] ||
-		   !s->sdht[1][0] || !s->sdht[1][1])
+		if(!s->sdht[0][0] || (d[0] > 1 && !s->sdht[0][1]) ||
+		   !s->sdht[1][0] || (d[0] > 1 && !s->sdht[1][1]))
 		{
 			fprintf(stderr, "Error: The image is missing one or more DHT tables\n");
 			return(SSDV_ERROR);

@@ -99,6 +99,7 @@ typedef struct
 	uint16_t marker_len; /* Length of data following marker             */
 	uint8_t *marker_data; /* Where to copy marker data too              */
 	uint16_t marker_data_len; /* How much is there                      */
+	uint8_t greyscale;  /* 0 = Normal (3 channels), 1 = Greyscale       */
 	uint8_t component;  /* 0 = Y, 1 = Cb, 2 = Cr                        */
 	uint8_t ycparts;    /* Number of Y component parts per MCU          */
 	uint8_t mcupart;    /* 0-3 = Y, 4 = Cb, 5 = Cr                      */
