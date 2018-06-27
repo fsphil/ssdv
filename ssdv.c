@@ -425,9 +425,16 @@ static char ssdv_process(ssdv_t *s)
 		uint8_t symbol, width;
 		int r;
 		
+		if(s->mcupart == 0 && s->acpart == 0 && s->next_reset_mcu > s->reset_mcu)
+		{
+			s->reset_mcu = s->next_reset_mcu;
+		}
+		
 		/* Lookup the code, return if error or not enough bits yet */
 		if((r = jpeg_dht_lookup(s, &symbol, &width)) != SSDV_OK)
+		{
 			return(r);
+		}
 		
 		if(s->acpart == 0) /* DC */
 		{
@@ -436,7 +443,10 @@ static char ssdv_process(ssdv_t *s)
 				/* No change in DC from last block */
 				if(s->reset_mcu == s->mcu_id && (s->mcupart == 0 || s->mcupart >= s->ycparts))
 				{
-					if(s->mode == S_ENCODING) ssdv_out_jpeg_int(s, 0, s->adc[s->component]);
+					if(s->mode == S_ENCODING)
+					{
+						ssdv_out_jpeg_int(s, 0, s->adc[s->component]);
+					}
 					else
 					{
 						ssdv_out_jpeg_int(s, 0, 0 - s->dc[s->component]);
@@ -576,19 +586,17 @@ static char ssdv_process(ssdv_t *s)
 			/* For greyscale input images, pad the 2x1 MCUs with empty colour blocks */
 			for(; s->mcupart < s->ycparts + 2; s->mcupart++)
 			{
-				if(s->mcupart < s->ycparts) s->component = 0;
-				else s->component = s->mcupart - s->ycparts + 1;
+				s->component = s->mcupart - s->ycparts + 1;
 				s->acpart = 0; ssdv_out_jpeg_int(s, 0, 0); /* DC */
 				s->acpart = 1; ssdv_out_jpeg_int(s, 0, 0); /* AC */
 			}
 		}
 		
-		/* Reached the end of this MCU part */
+		/* Reached the end of this MCU */
 		if(s->mcupart == s->ycparts + 2)
 		{
 			s->mcupart = 0;
 			s->mcu_id++;
-			s->reset_mcu = s->next_reset_mcu;
 			
 			/* Test for the end of image */
 			if(s->mcu_id >= s->mcu_count)
@@ -604,14 +612,9 @@ static char ssdv_process(ssdv_t *s)
 				/* The first MCU of each packet should be byte aligned */
 				ssdv_outbits_sync(s);
 				
-				s->next_reset_mcu = s->reset_mcu = s->mcu_id;
+				s->next_reset_mcu = s->mcu_id;
 				s->packet_mcu_id = s->mcu_id;
-				s->packet_mcu_offset = s->pkt_size_payload - s->out_len;
-			}
-			
-			if(s->mode == S_DECODING && s->mcu_id == s->reset_mcu)
-			{
-				s->workbits = s->worklen = 0;
+				s->packet_mcu_offset = s->pkt_size_payload - s->out_len + ((s->outlen + 7) / 8);
 			}
 			
 			/* Test for a reset marker */
@@ -1257,9 +1260,7 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	
 	if(s->packet_mcu_id != 0xFFFF)
 	{
-		/* Set the next reset MCU ID. We can't set it
-		 * directly here as the previous MCU may still
-		 * be being processed. */
+		/* Set the next reset MCU ID */
 		s->next_reset_mcu = s->packet_mcu_id;
 	}
 	
@@ -1316,13 +1317,10 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		fprintf(stderr, "Gap detected between packets %i and %i\n", s->packet_id - 1, packet_id);
 		
 		/* If this packet has no new MCU, ignore */
-		if(s->packet_mcu_offset == 0xFF) return(SSDV_FEED_ME);
+		if(s->packet_mcu_id == 0xFFFF) return(SSDV_FEED_ME);
 		
 		/* Fill the gap left by the missing packet */
 		ssdv_fill_gap(s, s->packet_mcu_id);
-		
-		/* Clear the workbits */
-		s->workbits = s->worklen = 0;
 		
 		/* Skip the bytes of the lost MCU */
 		i = s->packet_mcu_offset;
@@ -1337,15 +1335,16 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->packet_id = packet_id;
 	}
 	
-	/* Clear the work area if there is no overlap from previous packet */
-	if(s->packet_mcu_offset == 0)
-	{
-		s->workbits = s->worklen = 0;
-	}
-	
 	/* Feed the JPEG data into the processor */
 	for(; i < s->pkt_size_payload; i++)
 	{
+		if(i == s->packet_mcu_offset)
+		{
+			/* The first MCU in a packet is byte aligned,
+			 * any old bits should be dropped. */
+			s->workbits = s->worklen = 0;
+		}
+		
 		b = packet[SSDV_PKT_SIZE_HEADER + i];
 		
 		/* Add the new byte to the work area */
