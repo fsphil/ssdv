@@ -1337,6 +1337,12 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 		s->packet_id = packet_id;
 	}
 	
+	/* Clear the work area if there is no overlap from previous packet */
+	if(s->packet_mcu_offset == 0)
+	{
+		s->workbits = s->worklen = 0;
+	}
+	
 	/* Feed the JPEG data into the processor */
 	for(; i < s->pkt_size_payload; i++)
 	{
