@@ -114,6 +114,7 @@ typedef struct
 		S_DECODING,
 	} mode;
 	uint32_t reset_mcu; /* MCU block to do absolute encoding            */
+	uint32_t next_reset_mcu;
 	char needbits;      /* Number of bits needed to decode integer      */
 	
 	/* The input huffman and quantisation tables */
