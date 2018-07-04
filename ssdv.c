@@ -1313,6 +1313,13 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 	/* Is this not the packet we expected? */
 	if(packet_id != s->packet_id)
 	{
+		if(packet_id < s->packet_id)
+		{
+			/* The decoder can only accept packets in the correct order */
+			fprintf(stderr, "Packets are not in order. %i > %i\n", s->packet_id - 1, packet_id);
+			return(SSDV_FEED_ME);
+		}
+		
 		/* One or more packets have been lost! */
 		fprintf(stderr, "Gap detected between packets %i and %i\n", s->packet_id - 1, packet_id);
 		
@@ -1343,6 +1350,13 @@ char ssdv_dec_feed(ssdv_t *s, uint8_t *packet)
 			/* The first MCU in a packet is byte aligned,
 			 * any old bits should be dropped. */
 			s->workbits = s->worklen = 0;
+			
+			/* Abandon the packet if the MCU index is not what it should be. */
+			if(s->mcu_id != s->packet_mcu_id)
+			{
+				fprintf(stderr, "Unexpected MCU ID in packet %d.\n", packet_id);
+				return(SSDV_FEED_ME);
+			}
 		}
 		
 		b = packet[SSDV_PKT_SIZE_HEADER + i];
