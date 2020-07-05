@@ -768,16 +768,11 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		for(i = 0; i < d[5]; i++)
 		{
 			uint8_t *dq = &d[i * 3 + 6];
-			if(dq[0] != i + 1)
-			{
-				fprintf(stderr, "Error: Components are not in order in the SOF0 header\n");
-				return(SSDV_ERROR);
-			}
 			
 			fprintf(stderr, "DQT table for component %i: %02X, Sampling factor: %ix%i\n", dq[0], dq[2], dq[1] & 0x0F, dq[1] >> 4);
 			
 			/* The first (Y) component must have a factor of 2x2,2x1,1x2 or 1x1 */
-			if(dq[0] == 1)
+			if(i == 0)
 			{
 				switch(dq[1])
 				{
@@ -790,7 +785,7 @@ static char ssdv_have_marker_data(ssdv_t *s)
 					return(SSDV_ERROR);
 				}
 			}
-			else if(dq[0] != 1 && dq[1] != 0x11)
+			else if(i != 0 && dq[1] != 0x11)
 			{
 				fprintf(stderr, "Error: Component %i sampling factor must be 1x1\n", dq[0]);
 				return(SSDV_ERROR);
@@ -839,11 +834,6 @@ static char ssdv_have_marker_data(ssdv_t *s)
 		for(i = 0; i < d[0]; i++)
 		{
 			uint8_t *dh = &d[i * 2 + 1];
-			if(dh[0] != i + 1)
-			{
-				fprintf(stderr, "Error: Components are not in order in the SOF0 header\n");
-				return(SSDV_ERROR);
-			}
 			
 			fprintf(stderr, "Component %i DHT: %02X\n", dh[0], dh[1]);
 		}
