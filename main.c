@@ -72,7 +72,8 @@ int main(int argc, char *argv[])
 		case 'c':
 			if(strlen(optarg) > 6)
 				fprintf(stderr, "Warning: callsign is longer than 6 characters.\n");
-			strncpy(callsign, optarg, 7);
+			strncpy(callsign, optarg, 6);
+			callsign[6] = '\0';
 			break;
 		case 'i': image_id = atoi(optarg); break;
 		case 'q': quality = atoi(optarg); break;
