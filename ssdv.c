@@ -721,7 +721,7 @@ static char ssdv_have_marker(ssdv_t *s)
 static char ssdv_have_marker_data(ssdv_t *s)
 {
 	uint8_t *d = s->marker_data;
-	size_t l = s->marker_len;
+	ssize_t l = s->marker_len;
 	int i;
 	
 	switch(s->marker)
@@ -879,6 +879,11 @@ static char ssdv_have_marker_data(ssdv_t *s)
 				j += d[i];
 			
 			l -= j;
+			if (l < 0)
+			{
+				fprintf(stderr, "The image has an invalid marker length\n");
+				return(SSDV_ERROR);
+			}
 			d += j;
 		}
 		break;
@@ -895,6 +900,11 @@ static char ssdv_have_marker_data(ssdv_t *s)
 			
 			/* Skip to the next one, if present */
 			l -= 65;
+			if (l < 0)
+			{
+				fprintf(stderr, "The image has an invalid marker length\n");
+				return(SSDV_ERROR);
+			}
 			d += 65;
 		}
 		break;
