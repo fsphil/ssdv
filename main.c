@@ -79,7 +79,9 @@ int main(int argc, char *argv[])
 		case 'n': type = SSDV_TYPE_NOFEC; break;
 		case 'c':
 			if(strlen(optarg) > 6)
-				fprintf(stderr, "Warning: callsign is longer than 6 characters.\n");
+			{
+				fprintf(stderr, "Warning: callsign cropped to 6 characters.\n");
+			}
 			strncpy(callsign, optarg, 6);
 			callsign[6] = '\0';
 			break;
