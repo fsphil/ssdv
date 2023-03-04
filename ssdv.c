@@ -643,12 +643,12 @@ static void ssdv_set_packet_conf(ssdv_t *s)
 	switch(s->type)
 	{
 	case SSDV_TYPE_NORMAL:
-		s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+		s->pkt_size_payload = s->pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
 		break;
 	
 	case SSDV_TYPE_NOFEC:
-		s->pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
+		s->pkt_size_payload = s->pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
 		s->pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + s->pkt_size_payload - 1;
 		break;
 	}
@@ -919,11 +919,19 @@ static char ssdv_have_marker_data(ssdv_t *s)
 	return(SSDV_OK);
 }
 
-char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality)
+char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality, int pkt_size)
 {
 	/* Limit the quality level */
 	if(quality < 0) quality = 0;
 	if(quality > 7) quality = 7;
+	
+	/* Limit the packet length */
+	if(pkt_size > SSDV_PKT_SIZE ||
+	   pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - (type == SSDV_TYPE_NORMAL ? SSDV_PKT_SIZE_RSCODES : 0) < 2)
+	{
+		fprintf(stderr, "Invalid SSDV packet length\n");
+		return(SSDV_ERROR);
+	}
 	
 	memset(s, 0, sizeof(ssdv_t));
 	s->image_id = image_id;
@@ -931,6 +939,7 @@ char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, in
 	s->mode = S_ENCODING;
 	s->type = type;
 	s->quality = quality;
+	s->pkt_size = pkt_size;
 	ssdv_set_packet_conf(s);
 	
 	/* Prepare the output JPEG tables */
@@ -951,7 +960,7 @@ char ssdv_enc_set_buffer(ssdv_t *s, uint8_t *buffer)
 	s->out_len = s->pkt_size_payload;
 	
 	/* Zero the payload memory */
-	memset(s->out, 0, SSDV_PKT_SIZE);
+	memset(s->out, 0, s->pkt_size);
 	
 	/* Flush the output bits */
 	ssdv_outbits(s, 0, 0);
@@ -1210,9 +1219,17 @@ static void ssdv_fill_gap(ssdv_t *s, uint16_t next_mcu)
 	}
 }
 
-char ssdv_dec_init(ssdv_t *s)
+char ssdv_dec_init(ssdv_t *s, int pkt_size)
 {
+	/* Limit the packet length */
+	if(pkt_size > SSDV_PKT_SIZE)
+	{
+		fprintf(stderr, "Invalid SSDV packet length\n");
+		return(SSDV_ERROR);
+	}
+	
 	memset(s, 0, sizeof(ssdv_t));
+	s->pkt_size = pkt_size;
 	
 	/* The packet data should contain only scan data, no headers */
 	s->state = S_HUFF;
@@ -1407,7 +1424,7 @@ char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length)
 	return(SSDV_OK);
 }
 
-char ssdv_dec_is_packet(uint8_t *packet, int *errors)
+char ssdv_dec_is_packet(uint8_t *packet, int pkt_size, int *errors)
 {
 	uint8_t pkt[SSDV_PKT_SIZE];
 	uint8_t type;
@@ -1418,7 +1435,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	int i;
 	
 	/* Testing is destructive, work on a copy */
-	memcpy(pkt, packet, SSDV_PKT_SIZE);
+	memcpy(pkt, packet, pkt_size);
 	pkt[0] = 0x55;
 	
 	type = SSDV_TYPE_INVALID;
@@ -1426,7 +1443,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	if(pkt[1] == 0x66 + SSDV_TYPE_NOFEC)
 	{
 		/* Test for a valid NOFEC packet */
-		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
+		pkt_size_payload = pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
 		/* No FEC scan */
@@ -1445,7 +1462,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	else if(pkt[1] == 0x66 + SSDV_TYPE_NORMAL)
 	{
 		/* Test for a valid NORMAL packet */
-		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+		pkt_size_payload = pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
 		/* No FEC scan */
@@ -1465,7 +1482,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	if(type == SSDV_TYPE_INVALID)
 	{
 		/* Test for a valid NORMAL packet with correctable errors */
-		pkt_size_payload = SSDV_PKT_SIZE - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
+		pkt_size_payload = pkt_size - SSDV_PKT_SIZE_HEADER - SSDV_PKT_SIZE_CRC - SSDV_PKT_SIZE_RSCODES;
 		pkt_size_crcdata = SSDV_PKT_SIZE_HEADER + pkt_size_payload - 1;
 		
 		/* Run the reed-solomon decoder */
@@ -1504,7 +1521,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int *errors)
 	}
 	
 	/* Appears to be a valid packet! Copy it back */
-	memcpy(packet, pkt, SSDV_PKT_SIZE);
+	memcpy(packet, pkt, pkt_size);
 	
 	return(0);
 }

@@ -26,7 +26,8 @@
 void exit_usage()
 {
 	fprintf(stderr,
-		"Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [-q <level>] [<in file>] [<out file>]\n"
+		"\n"
+		"Usage: ssdv [-e|-d] [-n] [-t <percentage>] [-c <callsign>] [-i <id>] [-q <level>] [-l <length>] [<in file>] [<out file>]\n"
 		"\n"
 		"  -e Encode JPEG to SSDV packets.\n"
 		"  -d Decode SSDV packets to JPEG.\n"
@@ -36,7 +37,13 @@ void exit_usage()
 		"  -c Set the callign. Accepts A-Z 0-9 and space, up to 6 characters.\n"
 		"  -i Set the image ID (0-255).\n"
 		"  -q Set the JPEG quality level (0 to 7, defaults to 4).\n"
+		"  -l Set packet length in bytes (max: 256, default 256).\n"
 		"  -v Print data for each packet decoded.\n"
+		"\n"
+		"Packet Length\n"
+		"\n"
+		"The packet length must be specified for both encoding and decoding if not\n"
+		"the default 256 bytes. Smaller packets will increase overhead.\n"
 		"\n");
 	exit(-1);
 }
@@ -54,6 +61,7 @@ int main(int argc, char *argv[])
 	char callsign[7];
 	uint8_t image_id = 0;
 	int8_t quality = 4;
+	int pkt_length = SSDV_PKT_SIZE;
 	ssdv_t ssdv;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;
@@ -62,7 +70,7 @@ int main(int argc, char *argv[])
 	callsign[0] = '\0';
 	
 	opterr = 0;
-	while((c = getopt(argc, argv, "ednc:i:q:t:v")) != -1)
+	while((c = getopt(argc, argv, "ednc:i:q:l:t:v")) != -1)
 	{
 		switch(c)
 		{
@@ -77,6 +85,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'i': image_id = atoi(optarg); break;
 		case 'q': quality = atoi(optarg); break;
+		case 'l': pkt_length = atoi(optarg); break;
 		case 't': droptest = atoi(optarg); break;
 		case 'v': verbose = 1; break;
 		case '?': exit_usage();
@@ -117,22 +126,26 @@ int main(int argc, char *argv[])
 	switch(encode)
 	{
 	case 0: /* Decode */
+		
 		if(droptest > 0) fprintf(stderr, "*** NOTE: Drop test enabled: %i ***\n", droptest);
 		
-		ssdv_dec_init(&ssdv);
+		if(ssdv_dec_init(&ssdv, pkt_length) != SSDV_OK)
+		{
+			return(-1);
+		}
 		
 		jpeg_length = 1024 * 1024 * 4;
 		jpeg = malloc(jpeg_length);
 		ssdv_dec_set_buffer(&ssdv, jpeg, jpeg_length);
 		
 		i = 0;
-		while(fread(pkt, 1, SSDV_PKT_SIZE, fin) > 0)
+		while(fread(pkt, 1, pkt_length, fin) > 0)
 		{
 			/* Drop % of packets */
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, &errors) != 0) continue;
+			if(ssdv_dec_is_packet(pkt, pkt_length, &errors) != 0) continue;
 			
 			if(verbose)
 			{
@@ -171,7 +184,12 @@ int main(int argc, char *argv[])
 		break;
 	
 	case 1: /* Encode */
-		ssdv_enc_init(&ssdv, type, callsign, image_id, quality);
+		
+		if(ssdv_enc_init(&ssdv, type, callsign, image_id, quality, pkt_length) != SSDV_OK)
+		{
+			return(-1);
+		}
+		
 		ssdv_enc_set_buffer(&ssdv, pkt);
 		
 		i = 0;
@@ -201,7 +219,7 @@ int main(int argc, char *argv[])
 				return(-1);
 			}
 			
-			fwrite(pkt, 1, SSDV_PKT_SIZE, fout);
+			fwrite(pkt, 1, pkt_length, fout);
 			i++;
 		}
 		

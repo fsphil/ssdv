@@ -49,10 +49,11 @@ extern "C" {
 typedef struct
 {
 	/* Packet type configuration */
-	uint8_t type; /* 0 = Normal mode (224 byte packet + 32 bytes FEC),
-	                 1 = No-FEC mode (256 byte packet) */
+	uint8_t type; /* 0 = Normal mode (nom. 224 byte packet + 32 bytes FEC),
+	                 1 = No-FEC mode (nom. 256 byte packet) */
 	uint16_t pkt_size_payload;
 	uint16_t pkt_size_crcdata;
+	int pkt_size;
 	
 	/* Image information */
 	uint16_t width;
@@ -146,18 +147,18 @@ typedef struct {
 } ssdv_packet_info_t;
 
 /* Encoding */
-extern char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality);
+extern char ssdv_enc_init(ssdv_t *s, uint8_t type, char *callsign, uint8_t image_id, int8_t quality, int pkt_size);
 extern char ssdv_enc_set_buffer(ssdv_t *s, uint8_t *buffer);
 extern char ssdv_enc_get_packet(ssdv_t *s);
 extern char ssdv_enc_feed(ssdv_t *s, uint8_t *buffer, size_t length);
 
 /* Decoding */
-extern char ssdv_dec_init(ssdv_t *s);
+extern char ssdv_dec_init(ssdv_t *s, int pkt_size);
 extern char ssdv_dec_set_buffer(ssdv_t *s, uint8_t *buffer, size_t length);
 extern char ssdv_dec_feed(ssdv_t *s, uint8_t *packet);
 extern char ssdv_dec_get_jpeg(ssdv_t *s, uint8_t **jpeg, size_t *length);
 
-extern char ssdv_dec_is_packet(uint8_t *packet, int *errors);
+extern char ssdv_dec_is_packet(uint8_t *packet, int pkt_size, int *errors);
 extern void ssdv_dec_header(ssdv_packet_info_t *info, uint8_t *packet);
 
 #ifdef __cplusplus
