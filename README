@@ -13,7 +13,7 @@ $ ssdv -e -c TEST01 -i ID input.jpeg output.bin
 
 This encodes the 'input.jpeg' image file into SSDV packets stored in the 'output.bin' file. TEST01 (the callsign, an alphanumeric string up to 6 characters) and ID (a number from 0-255) are encoded into the header of each packet. The ID should be changed for each new image transmitted to allow the decoder to identify when a new image begins.
 
-The output file contains a series of SSDV packets, each packet always being 256 bytes in length. Additional data may be transmitted between each packet, the decoder will ignore this.
+The output file contains a series of fixed-length SSDV packets (default 256 bytes). Additional data may be transmitted between each packet, the decoder will ignore this.
 
 DECODING
 

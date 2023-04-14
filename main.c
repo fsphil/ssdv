@@ -63,6 +63,7 @@ int main(int argc, char *argv[])
 	int8_t quality = 4;
 	int pkt_length = SSDV_PKT_SIZE;
 	ssdv_t ssdv;
+	int skipped;
 	
 	uint8_t pkt[SSDV_PKT_SIZE], b[128], *jpeg;
 	size_t jpeg_length;
@@ -141,17 +142,37 @@ int main(int argc, char *argv[])
 		ssdv_dec_set_buffer(&ssdv, jpeg, jpeg_length);
 		
 		i = 0;
-		while(fread(pkt, 1, pkt_length, fin) > 0)
+		while(fread(pkt, pkt_length, 1, fin) > 0)
 		{
 			/* Drop % of packets */
 			if(droptest && (rand() / (RAND_MAX / 100) < droptest)) continue;
 			
 			/* Test the packet is valid */
-			if(ssdv_dec_is_packet(pkt, pkt_length, &errors) != 0) continue;
+			skipped = 0;
+			while((c = ssdv_dec_is_packet(pkt, pkt_length, &errors)) != 0)
+			{
+				/* Read 1 byte at a time until a new packet is found */
+				memmove(&pkt[0], &pkt[1], pkt_length - 1);
+				
+				if(fread(&pkt[pkt_length - 1], 1, 1, fin) <= 0)
+				{
+					break;
+				}
+				
+				skipped++;
+			}
+			
+			/* No valid packet was found before EOF */
+			if(c != 0) break;
 			
 			if(verbose)
 			{
 				ssdv_packet_info_t p;
+				
+				if(skipped > 0)
+				{
+					fprintf(stderr, "Skipped %d bytes.\n", skipped);
+				}
 				
 				ssdv_dec_header(&p, pkt);
 				fprintf(stderr, "Decoded image packet. Callsign: %s, Image ID: %d, Resolution: %dx%d, Packet ID: %d (%d errors corrected)\n"
