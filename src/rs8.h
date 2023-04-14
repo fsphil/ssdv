@@ -1,7 +1,7 @@
 /* Reed-Solomon encoder
  * Copyright 2004, Phil Karn, KA9Q
  * May be used under the terms of the GNU Lesser General Public License (LGPL)
- * 
+ *
  * This version tweaked by Philip Heron <phil@sanslogic.co.uk>
 */
 
