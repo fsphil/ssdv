@@ -1,20 +1,24 @@
-
+PROJECT=ssdv
 CC=gcc
 CFLAGS=-g -O3 -Wall
 LDFLAGS=-g
+INSTALL=install
+RM=rm -f
+OBJS=src/main.o src/ssdv.o src/rs8.o
+HEADS=src/ssdv.h src/rs8.h
 
-all: ssdv
+all: $(PROJECT)
 
-ssdv: main.o ssdv.o rs8.o ssdv.h rs8.h
-	$(CC) $(LDFLAGS) main.o ssdv.o rs8.o -o ssdv
+$(PROJECT): $(OBJS) $(HEADS)
+	$(CC) $(LDFLAGS) $^ -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 install: all
-	mkdir -p ${DESTDIR}/usr/bin
-	install -m 755 ssdv ${DESTDIR}/usr/bin
+	$(INSTALL) -d ${DESTDIR}/usr/bin
+	$(INSTALL) -m 755 $(PROJECT) ${DESTDIR}/usr/bin
 
 clean:
-	rm -f *.o ssdv
+	$(RM) $(OBJS) $(PROJECT)
 
