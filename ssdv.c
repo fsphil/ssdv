@@ -1096,7 +1096,9 @@ char ssdv_enc_get_packet(ssdv_t *s)
 				
 				/* Generate the RS codes */
 				if(s->type == SSDV_TYPE_NORMAL)
-					encode_rs_8(&s->out[1], &s->out[i], 0);
+				{
+					encode_rs_8(&s->out[1], &s->out[i], SSDV_PKT_SIZE - s->pkt_size);
+				}
 				
 				s->packet_id++;
 				
@@ -1487,7 +1489,7 @@ char ssdv_dec_is_packet(uint8_t *packet, int pkt_size, int *errors)
 		
 		/* Run the reed-solomon decoder */
 		pkt[1] = 0x66 + SSDV_TYPE_NORMAL;
-		i = decode_rs_8(&pkt[1], 0, 0, 0);
+		i = decode_rs_8(&pkt[1], 0, 0, SSDV_PKT_SIZE - pkt_size);
 		
 		if(i < 0) return(-1); /* Reed-solomon decoder failed */
 		if(errors) *errors = i;
